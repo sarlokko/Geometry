@@ -1,0 +1,11 @@
+{
+  "name": "neon-dash",
+  "version": "1.0.0",
+  "description": "Neon Dash — Geometry Dash clone",
+  "scripts": {
+    "start": "serve public -l 8080"
+  },
+  "devDependencies": {
+    "serve": "^14.2.4"
+  }
+}
