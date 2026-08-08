@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#06101c" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <title>Neon Dash — Geometry Dash Clone</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game" aria-label="Neon Dash game canvas"></canvas>
+
+      <div id="hud" class="hud hidden" aria-live="polite">
+        <div class="hud-top">
+          <span id="attempt">Attempt 1</span>
+          <span id="progress">0%</span>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <div id="menu" class="overlay">
+        <div class="menu-panel">
+          <p class="brand">NEON DASH</p>
+          <h1>Salta. Sopravvivi. Ripeti.</h1>
+          <p class="tagline">
+            Un clone ritmico in stile Geometry Dash: il cubo corre da solo, tu decidi quando saltare.
+          </p>
+          <div class="cta-row">
+            <button id="btn-play" class="btn primary" type="button">Gioca</button>
+            <button id="btn-practice" class="btn ghost" type="button">Practice</button>
+          </div>
+          <p class="hint">Spazio / Click / Tocco per saltare · Esc per pausa</p>
+        </div>
+      </div>
+
+      <div id="pause" class="overlay hidden">
+        <div class="menu-panel compact">
+          <p class="brand small">NEON DASH</p>
+          <h2>Pausa</h2>
+          <div class="cta-row">
+            <button id="btn-resume" class="btn primary" type="button">Continua</button>
+            <button id="btn-restart" class="btn ghost" type="button">Ricomincia</button>
+            <button id="btn-menu" class="btn ghost" type="button">Menu</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="complete" class="overlay hidden">
+        <div class="menu-panel compact">
+          <p class="brand small">NEON DASH</p>
+          <h2>Livello completato!</h2>
+          <p id="complete-stats" class="tagline"></p>
+          <div class="cta-row">
+            <button id="btn-again" class="btn primary" type="button">Ancora</button>
+            <button id="btn-complete-menu" class="btn ghost" type="button">Menu</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
