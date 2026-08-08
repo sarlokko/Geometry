@@ -212,6 +212,16 @@ h2 {
   letter-spacing: 0.02em;
 }
 
+.build-tag {
+  margin: 0 0 1.1rem;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
