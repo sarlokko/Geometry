@@ -1,6 +1,6 @@
-import { CONFIG, COLORS } from "./config.js?v=10b";
-import { createLevel } from "./level.js?v=10b";
-import { AudioBus } from "./audio.js?v=10b";
+import { CONFIG, COLORS } from "./config.js?v=10c";
+import { createLevel } from "./level.js?v=10c";
+import { AudioBus } from "./audio.js?v=10c";
 
 const STORAGE_ATTEMPTS = "neon-dash-attempts";
 const STORAGE_BEST = "neon-dash-best";
@@ -312,6 +312,7 @@ export class Game {
     }
 
     this.resolveObjects();
+    this.enforceShipExit();
 
     if (this.jumpBuffer > 0) {
       this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
@@ -425,16 +426,12 @@ export class Game {
         }
       }
 
-      if (o.type === "portal" && aabb(box, o) && p.mode !== o.mode) {
-        p.mode = o.mode;
-        this.audio.portal();
-        this._flash = 0.35;
-        this.burst(
-          o.x + o.w / 2,
-          o.y + o.h / 2,
-          20,
-          o.mode === "ship" ? COLORS.portalShip : COLORS.portalCube
-        );
+      if (o.type === "portal" && p.mode !== o.mode) {
+        const crossed =
+          o.force || o.mode === "cube"
+            ? box.x + box.w >= o.x && box.x <= o.x + o.w
+            : aabb(box, o);
+        if (crossed) this.applyPortal(o);
       }
 
       if (o.type === "finish" && box.x + box.w >= o.x) {
@@ -451,6 +448,47 @@ export class Game {
         orb._used = true;
         this.audio.orb();
         this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, COLORS.orb);
+      }
+    }
+  }
+
+  applyPortal(o) {
+    const p = this.player;
+    if (!p?.alive || p.mode === o.mode) return;
+    p.mode = o.mode;
+    this.audio.portal();
+    this._flash = 0.35;
+    if (o.mode === "cube") {
+      // Leave ship cleanly — drop back toward ground as a cube
+      p.vy = Math.max(p.vy, 180);
+      p.rotation = 0;
+    }
+    this.burst(
+      o.x - this.cameraX + o.w / 2,
+      Math.min(Math.max(p.y + p.h / 2, o.y + 20), o.y + o.h - 20),
+      20,
+      o.mode === "ship" ? COLORS.portalShip : COLORS.portalCube
+    );
+  }
+
+  /** End of every ship stretch must return to cube — cannot skip the exit gate. */
+  enforceShipExit() {
+    const p = this.player;
+    if (!p?.alive || p.mode !== "ship") return;
+    const exits = this.level.shipExits || [];
+    for (const x of exits) {
+      // Only the gate we're overlapping (not older exits already behind us)
+      if (p.worldX + p.w >= x && p.worldX <= x + 72) {
+        this.applyPortal({
+          type: "portal",
+          x,
+          y: 40,
+          w: 56,
+          h: CONFIG.GROUND_Y - 40,
+          mode: "cube",
+          force: true,
+        });
+        return;
       }
     }
   }
@@ -708,15 +746,24 @@ export class Game {
       ctx.stroke();
     } else if (o.type === "portal") {
       const color = o.mode === "ship" ? COLORS.portalShip : COLORS.portalCube;
-      const grad = ctx.createLinearGradient(sx, o.y, sx + o.w, o.y + o.h);
+      const grad = ctx.createLinearGradient(sx, o.y, sx + o.w, o.y);
       grad.addColorStop(0, "transparent");
       grad.addColorStop(0.5, color);
       grad.addColorStop(1, "transparent");
       ctx.fillStyle = grad;
+      ctx.globalAlpha = o.force ? 0.85 : 0.7;
       ctx.fillRect(sx, o.y, o.w, o.h);
+      ctx.globalAlpha = 1;
       ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = o.force ? 4 : 3;
       ctx.strokeRect(sx, o.y, o.w, o.h);
+      // Label so exits read as mandatory cube gates
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.font = "700 14px Orbitron, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(o.mode === "ship" ? "SHIP" : "CUBE", sx + o.w / 2, o.y + 28);
+      ctx.restore();
     } else if (o.type === "checkpoint") {
       const active = o._activated;
       const color = active ? COLORS.checkpointActive : COLORS.checkpoint;

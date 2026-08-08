@@ -1,13 +1,13 @@
-import { CONFIG } from "./config.js?v=10b";
+import { CONFIG } from "./config.js?v=10c";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
 
-/** @typedef {{ type: string, x: number, y: number, w?: number, h?: number, mode?: string, section?: number, label?: string, speed?: number }} LevelObject */
+/** @typedef {{ type: string, x: number, y: number, w?: number, h?: number, mode?: string, section?: number, label?: string, speed?: number, force?: boolean }} LevelObject */
 
 /**
  * Continuous course: many sections, each with a checkpoint and rising difficulty.
- * @returns {{ length: number, objects: LevelObject[], checkpoints: LevelObject[], sections: { index: number, name: string, startX: number, endX: number, speed: number }[] }}
+ * @returns {{ length: number, objects: LevelObject[], checkpoints: LevelObject[], sections: { index: number, name: string, startX: number, endX: number, speed: number }[], shipExits: number[] }}
  */
 export function createLevel() {
   /** @type {LevelObject[]} */
@@ -16,6 +16,8 @@ export function createLevel() {
   const checkpoints = [];
   /** @type {{ index: number, name: string, startX: number, endX: number, speed: number }[]} */
   const sections = [];
+  /** @type {number[]} */
+  const shipExits = [];
 
   const add = (obj) => objects.push(obj);
   const addBlock = (x, y, w, h) => add({ type: "block", x, y, w, h });
@@ -23,8 +25,21 @@ export function createLevel() {
   // Wider / taller pads = easier to catch while running
   const addPad = (x, w = S + 18) => add({ type: "pad", x, y: G - 16, w, h: 16 });
   const addOrb = (x, y = G - S * 2.2, size = 38) => add({ type: "orb", x, y, w: size, h: size });
-  const addPortal = (x, mode) =>
-    add({ type: "portal", x, y: G - S * 3, w: 40, h: S * 3, mode });
+  // Full-height gates — ship entry / cube exit cannot be flown over or under
+  const addPortal = (x, mode, { force = false } = {}) => {
+    const portal = {
+      type: "portal",
+      x,
+      y: 40,
+      w: mode === "cube" ? 56 : 48,
+      h: G - 40,
+      mode,
+      force: force || mode === "cube",
+    };
+    add(portal);
+    if (portal.force && mode === "cube") shipExits.push(x);
+    return portal;
+  };
 
   let cursor = 700;
 
@@ -179,9 +194,9 @@ export function createLevel() {
     addBlock(cursor, G - 130, S, 130);
     cursor += 300;
     addBlock(cursor, 110, S, 150);
-    cursor += 280;
-    addPortal(cursor, "cube");
     cursor += 260;
+    addPortal(cursor, "cube", { force: true });
+    cursor += 200;
     endSection(sec);
   }
 
@@ -228,8 +243,8 @@ export function createLevel() {
       }
       cursor += 250 - Math.min(i * 8, 40);
     }
-    addPortal(cursor, "cube");
-    cursor += 240;
+    addPortal(cursor, "cube", { force: true });
+    cursor += 200;
     endSection(sec);
   }
 
@@ -291,9 +306,9 @@ export function createLevel() {
     addBlock(cursor, G - 150, S, 150);
     cursor += 240;
     addBlock(cursor, 100, S, 170);
-    cursor += 220;
-    addPortal(cursor, "cube");
     cursor += 200;
+    addPortal(cursor, "cube", { force: true });
+    cursor += 180;
     addSpike(cursor, 30);
     cursor += 110;
     addSpike(cursor, 30);
@@ -312,5 +327,6 @@ export function createLevel() {
     objects,
     checkpoints,
     sections,
+    shipExits,
   };
 }

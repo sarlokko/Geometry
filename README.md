@@ -4,15 +4,20 @@ Clone web di **Geometry Dash**: platformer ritmico in cui il cubo corre da solo 
 
 ## Gioca online (cellulare e remoto)
 
-Il gioco è **online e giocabile subito**:
+Link principale (sempre questo):
 
-- **GitHub Pages (consigliato):** https://sarlokko.github.io/Geometry/
-- **Alternativa githack:** https://raw.githack.com/sarlokko/Geometry/gh-pages/index.html
-- **Alternativa jsDelivr:** https://cdn.jsdelivr.net/gh/sarlokko/Geometry@gh-pages/index.html
+**https://sarlokko.github.io/Geometry/**
 
-Apri il link dal browser del cellulare. Controlli touch: **tocca lo schermo per saltare**.
+Backup se Pages è in ritardo:
 
-Ogni push su `main` pubblica automaticamente la versione aggiornata (branch `gh-pages`).
+- https://rawcdn.githack.com/sarlokko/Geometry/gh-pages/index.html
+- https://cdn.jsdelivr.net/gh/sarlokko/Geometry@gh-pages/index.html
+
+Apri dal browser del cellulare. Controlli touch: **tocca lo schermo per saltare**.
+
+Nel menu deve comparire il tag build (`v10c…`). Se vedi una versione vecchia, chiudi il tab e riapri il link.
+
+Ogni push su `main` pubblica automaticamente su `gh-pages`.
 
 ## Avvio locale
 
