@@ -4,20 +4,26 @@ export const CONFIG = {
   GROUND_Y: 560,
   PLAYER_SIZE: 42,
   PLAYER_X: 280,
-  // Slower run = more reaction time
+  // Base run speed — sections can scale this up
   SPEED: 360,
   GRAVITY: 2400,
   JUMP_VELOCITY: -980,
-  PAD_VELOCITY: -1120,
-  ORB_VELOCITY: -1000,
+  // Yellow pad / orb — snappier, more readable arcs
+  PAD_VELOCITY: -1220,
+  ORB_VELOCITY: -1100,
+  ORB_HIT_PAD: 18,
+  PAD_TRIGGER_VY: -90,
   SHIP_THRUST: -2000,
   SHIP_GRAVITY: 1100,
   MAX_FALL: 1300,
   ROTATION_SPEED: 7.5,
-  // Extra forgiveness
+  // Extra forgiveness (tightens slightly in later sections via level design)
   SPIKE_HITBOX_PAD: -10,
   COYOTE_TIME: 0.09,
-  JUMP_BUFFER: 0.12,
+  JUMP_BUFFER: 0.14,
+  // Continuous run
+  SECTION_COUNT: 10,
+  CHECKPOINT_RESPAWN_OFFSET: 56,
 };
 
 export const COLORS = {
@@ -36,4 +42,6 @@ export const COLORS = {
   portalCube: "#39f0c0",
   finish: "#ffffff",
   particle: "#9dffe4",
+  checkpoint: "#7ee7ff",
+  checkpointActive: "#39f0c0",
 };

@@ -61,11 +61,19 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: 0.75rem;
   font-family: var(--font-display);
-  font-size: clamp(0.75rem, 2vw, 0.95rem);
+  font-size: clamp(0.7rem, 2vw, 0.9rem);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-shadow: 0 0 18px rgba(57, 240, 192, 0.35);
+}
+
+#section {
+  flex: 1;
+  text-align: center;
+  color: var(--accent-2);
+  letter-spacing: 0.1em;
 }
 
 .progress-track {
@@ -202,6 +210,16 @@ h2 {
   color: var(--muted);
   font-size: 0.95rem;
   letter-spacing: 0.02em;
+}
+
+.build-tag {
+  margin: 0 0 1.1rem;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 @keyframes fade-in {

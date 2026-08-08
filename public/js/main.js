@@ -1,4 +1,4 @@
-import { Game } from "./game.js";
+import { Game } from "./game.js?v=10c";
 
 const els = {
   menu: document.getElementById("menu"),
@@ -8,6 +8,7 @@ const els = {
   attempt: document.getElementById("attempt"),
   progress: document.getElementById("progress"),
   progressFill: document.getElementById("progress-fill"),
+  section: document.getElementById("section"),
   completeStats: document.getElementById("complete-stats"),
   canvas: document.getElementById("game"),
 };
@@ -17,10 +18,15 @@ const game = new Game(els.canvas, {
     els.attempt.textContent = `Attempt ${data.attempt}`;
     els.progress.textContent = `${data.progress}%`;
     els.progressFill.style.width = `${data.progress}%`;
+    if (els.section) {
+      els.section.textContent = `${data.sectionName} · ${data.section}/${data.sectionTotal}`;
+    }
   },
   onPause: () => showOverlay("pause"),
   onComplete: (data) => {
-    els.completeStats.textContent = `Completato in ${data.attempt} attempt${data.attempt === 1 ? "" : "s"}.`;
+    els.completeStats.textContent = `Corsa completata in ${data.attempt} attempt${
+      data.attempt === 1 ? "" : "s"
+    } · ${data.sections} sezioni.`;
     showOverlay("complete");
     els.hud.classList.add("hidden");
   },
