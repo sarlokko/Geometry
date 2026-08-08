@@ -3,87 +3,56 @@ import { CONFIG } from "./config.js";
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
 
-/** @typedef {{ type: string, x: number, y: number, w?: number, h?: number }} LevelObject */
+/** @typedef {{ type: string, x: number, y: number, w?: number, h?: number, mode?: string }} LevelObject */
 
 /**
- * Build a handcrafted intro-to-mid difficulty course.
- * Coordinates are world-space; player scrolls through them.
+ * Easy / beginner course — wide spacing, readable patterns.
  * @returns {{ length: number, objects: LevelObject[] }}
  */
 export function createLevel() {
   /** @type {LevelObject[]} */
   const objects = [];
 
-  const add = (obj) => objects.push(obj);
+  // Long runway to learn the jump
+  addSpike(objects, 1100);
+  addSpike(objects, 1500);
 
-  // Soft intro runway — learn the jump timing
-  add({ type: "deco", x: 100, y: G - 180, w: 40, h: 40 });
-  addSpike(objects, 980);
-  addSpike(objects, 1280);
+  // Low platforms with room to land
+  addBlock(objects, 1900, G - S, S * 4, S);
+  addSpike(objects, 1900 + S * 4 + 80);
+  addBlock(objects, 2300, G - S, S * 4, S);
 
-  // First elevated platform
-  addBlock(objects, 1600, G - S, S * 3, S);
-  addSpike(objects, 1600 + S * 3 + 50);
-  addBlock(objects, 1920, G - S, S * 3, S);
+  // Gentle stairs (2 steps only)
+  addBlock(objects, 2750, G - S, S * 2, S);
+  addBlock(objects, 2750 + S * 2, G - S * 2, S * 2, S * 2);
+  addSpike(objects, 2750 + S * 4 + 70);
 
-  // Staircase
-  for (let i = 0; i < 3; i++) {
-    addBlock(objects, 2300 + i * S, G - S * (i + 1), S, S * (i + 1));
-  }
-  addSpike(objects, 2300 + 3 * S + 40);
+  // Single pad bounce onto a wide ledge
+  add({ type: "pad", x: 3200, y: G - 12, w: S + 8, h: 12 });
+  addBlock(objects, 3500, G - S * 2, S * 5, S);
 
-  // Drop + pad bounce
-  add({ type: "pad", x: 2550, y: G - 12, w: S, h: 12 });
-  addBlock(objects, 2800, G - S * 3, S * 2, S);
-  addSpike(objects, 2800 + S * 2 + 30);
-  addBlock(objects, 3050, G - S * 2, S * 4, S * 2);
+  // Orb intro — one spike, big orb, landing pad
+  addSpike(objects, 4000);
+  add({ type: "orb", x: 4180, y: G - S * 2.4, w: 34, h: 34 });
+  addBlock(objects, 4450, G - S, S * 4, S);
 
-  // Orb section
-  addSpike(objects, 3400);
-  addSpike(objects, 3480);
-  add({ type: "orb", x: 3560, y: G - S * 2.2, w: 28, h: 28 });
-  addSpike(objects, 3720);
-  add({ type: "orb", x: 3860, y: G - S * 2.6, w: 28, h: 28 });
-  addBlock(objects, 4050, G - S, S * 3, S);
+  // Easy ship section — wide gaps, short obstacles
+  add({ type: "portal", x: 4900, y: G - S * 3, w: 40, h: S * 3, mode: "ship" });
 
-  // Ceiling hazard tunnel feel via tall spikes + blocks
-  addBlock(objects, 4400, G - S * 4, S, S * 4);
-  addSpike(objects, 4480);
-  addBlock(objects, 4560, G - S, S * 2, S);
-  addSpike(objects, 4560 + S * 2 + 16);
-  add({ type: "pad", x: 4780, y: G - 12, w: S, h: 12 });
-  addBlock(objects, 5000, G - S * 3.5, S * 2, S);
+  addBlock(objects, 5200, 120, S, 120);
+  addBlock(objects, 5550, G - 120, S, 120);
+  addBlock(objects, 5900, 120, S, 140);
+  addBlock(objects, 6250, G - 130, S, 130);
 
-  // Ship portal
-  add({ type: "portal", x: 5400, y: G - S * 3, w: 36, h: S * 3, mode: "ship" });
+  add({ type: "portal", x: 6600, y: G - S * 3, w: 40, h: S * 3, mode: "cube" });
 
-  // Ship corridor with hanging obstacles
-  for (let i = 0; i < 8; i++) {
-    const x = 5600 + i * 220;
-    if (i % 2 === 0) {
-      addBlock(objects, x, 120, S * 1.2, 160 + (i % 3) * 30);
-    } else {
-      addBlock(objects, x, G - (140 + (i % 3) * 40), S * 1.2, 140 + (i % 3) * 40);
-    }
-  }
+  // Soft outro — spaced singles, then finish
+  addSpike(objects, 7000);
+  addSpike(objects, 7400);
+  add({ type: "pad", x: 7700, y: G - 12, w: S + 8, h: 12 });
+  addBlock(objects, 8000, G - S, S * 6, S);
 
-  // Back to cube
-  add({ type: "portal", x: 7400, y: G - S * 3, w: 36, h: S * 3, mode: "cube" });
-
-  // Final gauntlet
-  addSpike(objects, 7700);
-  addSpike(objects, 7780);
-  add({ type: "orb", x: 7900, y: G - S * 2.4, w: 28, h: 28 });
-  addSpike(objects, 8050);
-  addBlock(objects, 8200, G - S * 2, S * 2, S * 2);
-  add({ type: "pad", x: 8450, y: G - 12, w: S, h: 12 });
-  addSpike(objects, 8600);
-  addSpike(objects, 8680);
-  addSpike(objects, 8760);
-  addBlock(objects, 8950, G - S, S * 5, S);
-
-  // Finish line
-  const finishX = 9400;
+  const finishX = 8400;
   add({ type: "finish", x: finishX, y: 80, w: 18, h: G - 80 });
 
   return {
@@ -97,5 +66,5 @@ function addBlock(objects, x, y, w, h) {
 }
 
 function addSpike(objects, x) {
-  objects.push({ type: "spike", x, y: G - 36, w: 36, h: 36 });
+  objects.push({ type: "spike", x, y: G - 34, w: 34, h: 34 });
 }

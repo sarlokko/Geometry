@@ -112,6 +112,8 @@ export class Game {
     this.particles = [];
     this.held = false;
     this.orbBuffer = false;
+    this.coyote = CONFIG.COYOTE_TIME;
+    this.jumpBuffer = 0;
     this._shake = 0;
     this._flash = 0;
     this.progress = 0;
@@ -132,6 +134,7 @@ export class Game {
     if (this.state !== "playing") return;
     this.held = true;
     this.orbBuffer = true;
+    this.jumpBuffer = CONFIG.JUMP_BUFFER;
     this.tryJump();
   }
 
@@ -148,12 +151,14 @@ export class Game {
       return;
     }
 
-    if (p.onGround) {
+    if (p.onGround || this.coyote > 0) {
       p.vy = CONFIG.JUMP_VELOCITY;
       p.onGround = false;
+      this.coyote = 0;
+      this.jumpBuffer = 0;
       this.audio.jump();
       this.burst(p.x + p.w / 2, p.y + p.h, 8, COLORS.player);
-      return;
+      return true;
     }
 
     // Orb jump if overlapping an orb and buffered
@@ -163,16 +168,18 @@ export class Game {
         p.vy = CONFIG.ORB_VELOCITY;
         p.onGround = false;
         this.orbBuffer = false;
+        this.jumpBuffer = 0;
         orb._used = true;
         this.audio.orb();
         this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, COLORS.orb);
+        return true;
       }
     }
+    return false;
   }
 
   findTouching(type) {
-    const p = this.player;
-    const box = this.playerWorldBox();
+    const box = inflate(this.playerWorldBox(), 10);
     for (const o of this.level.objects) {
       if (o.type !== type || o._used) continue;
       if (aabb(box, o)) return o;
@@ -235,9 +242,12 @@ export class Game {
       p.y = CONFIG.GROUND_Y - p.h;
       p.vy = 0;
       p.onGround = true;
+      this.coyote = CONFIG.COYOTE_TIME;
       if (p.mode === "cube") {
         p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
       }
+    } else if (p.mode === "cube") {
+      this.coyote = Math.max(0, this.coyote - dt);
     }
 
     // Ceiling for ship
@@ -254,6 +264,15 @@ export class Game {
     }
 
     this.resolveObjects();
+
+    // Buffered jump after landing / coyote window
+    if (this.jumpBuffer > 0) {
+      this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+      if (p.mode === "cube" && this.tryJump()) {
+        /* consumed */
+      }
+    }
+
     this.updateParticles(dt);
 
     this.progress = clamp(p.worldX / this.level.length, 0, 1);
@@ -289,25 +308,34 @@ export class Game {
       if (o._used) continue;
       if (!nearCamera(o, this.cameraX)) continue;
 
-      if (o.type === "spike" && aabb(box, inflate(o, -4))) {
+      if (o.type === "spike" && aabb(box, inflate(o, CONFIG.SPIKE_HITBOX_PAD))) {
         this.die();
         return;
       }
 
       if (o.type === "block") {
-        if (!aabb(box, o)) continue;
-        const fromTop = this._prevWorldY + p.h <= o.y + 14 && p.vy >= -40;
+        // Slightly smaller player box vs blocks = fewer unfair side clips
+        const blockBox = { x: box.x + 4, y: box.y, w: box.w - 8, h: box.h };
+        if (!aabb(blockBox, o)) continue;
+        const fromTop = this._prevWorldY + p.h <= o.y + 16 && p.vy >= -60;
         if (fromTop) {
           p.y = o.y - p.h;
           p.vy = 0;
           p.onGround = true;
+          this.coyote = CONFIG.COYOTE_TIME;
           if (p.mode === "cube") {
             p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
           }
-        } else {
-          // Side or bottom hit is fatal in GD style
+        } else if (p.mode === "ship") {
           this.die();
           return;
+        } else {
+          // Cube side hits: only lethal if deeply overlapping
+          const overlapX = Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
+          if (overlapX > 12) {
+            this.die();
+            return;
+          }
         }
       }
 
