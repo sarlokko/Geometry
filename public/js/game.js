@@ -4,11 +4,12 @@ import { AudioBus } from "./audio.js";
 
 const STORAGE_ATTEMPTS = "neon-dash-attempts";
 const STORAGE_BEST = "neon-dash-best";
+const STORAGE_BEST_SECTION = "neon-dash-best-section";
 
 export class Game {
   /**
    * @param {HTMLCanvasElement} canvas
-   * @param {{ onHud?: Function, onDeath?: Function, onComplete?: Function, onPause?: Function }} hooks
+   * @param {{ onHud?: Function, onDeath?: Function, onComplete?: Function, onPause?: Function, onCheckpoint?: Function }} hooks
    */
   constructor(canvas, hooks = {}) {
     this.canvas = canvas;
@@ -20,6 +21,7 @@ export class Game {
     this.practice = false;
     this.attempt = Number(localStorage.getItem(STORAGE_ATTEMPTS) || 0);
     this.best = Number(localStorage.getItem(STORAGE_BEST) || 0);
+    this.bestSection = Number(localStorage.getItem(STORAGE_BEST_SECTION) || 0);
 
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.scale = 1;
@@ -32,6 +34,12 @@ export class Game {
     this._prevWorldY = 0;
 
     this.level = createLevel();
+    this.checkpointIndex = -1;
+    this.activeCheckpoint = null;
+    this.sectionIndex = 0;
+    this.sectionName = this.level.sections[0]?.name || "Warm-up";
+    this.speedMul = 1;
+
     this.resetPlayer(true);
 
     this._last = 0;
@@ -39,6 +47,7 @@ export class Game {
     this._shake = 0;
     this._flash = 0;
     this._bgPulse = 0;
+    this._checkpointFlash = 0;
 
     this._bindResize = () => this.resize();
     window.addEventListener("resize", this._bindResize);
@@ -66,6 +75,12 @@ export class Game {
     this.attempt += 1;
     localStorage.setItem(STORAGE_ATTEMPTS, String(this.attempt));
     this.level = createLevel();
+    this.checkpointIndex = -1;
+    this.activeCheckpoint = null;
+    this.sectionIndex = 0;
+    this.sectionName = this.level.sections[0]?.name || "Warm-up";
+    this.speedMul = this.level.sections[0]?.speed || 1;
+    this.clearObjectFlags();
     this.resetPlayer(false);
     this.state = "playing";
     this.audio.ensure();
@@ -94,11 +109,39 @@ export class Game {
     this.resetPlayer(true);
   }
 
-  resetPlayer(soft) {
+  clearObjectFlags() {
+    for (const o of this.level.objects) {
+      o._used = false;
+      o._activated = false;
+    }
+  }
+
+  resetObjectFlagsAfter(worldX) {
+    for (const o of this.level.objects) {
+      if (o.x >= worldX - 10) {
+        o._used = false;
+      }
+    }
+  }
+
+  resetPlayer(soft, atCheckpoint = null) {
+    const spawnWorldX = atCheckpoint
+      ? atCheckpoint.x + CONFIG.CHECKPOINT_RESPAWN_OFFSET
+      : CONFIG.PLAYER_X;
+
+    this.speedMul = atCheckpoint?.speed || this.level.sections[0]?.speed || 1;
+    if (atCheckpoint) {
+      this.sectionIndex = atCheckpoint.section;
+      this.sectionName = atCheckpoint.label || `Sezione ${atCheckpoint.section}`;
+    } else if (!soft) {
+      this.sectionIndex = this.level.sections[0]?.index || 1;
+      this.sectionName = this.level.sections[0]?.name || "Warm-up";
+    }
+
     this.player = {
       x: CONFIG.PLAYER_X,
       y: CONFIG.GROUND_Y - CONFIG.PLAYER_SIZE,
-      vx: CONFIG.SPEED,
+      vx: CONFIG.SPEED * this.speedMul,
       vy: 0,
       w: CONFIG.PLAYER_SIZE,
       h: CONFIG.PLAYER_SIZE,
@@ -106,9 +149,9 @@ export class Game {
       mode: "cube",
       rotation: 0,
       alive: true,
-      worldX: CONFIG.PLAYER_X,
+      worldX: spawnWorldX,
     };
-    this.cameraX = 0;
+    this.cameraX = Math.max(0, spawnWorldX - CONFIG.PLAYER_X);
     this.particles = [];
     this.held = false;
     this.orbBuffer = false;
@@ -116,7 +159,7 @@ export class Game {
     this.jumpBuffer = 0;
     this._shake = 0;
     this._flash = 0;
-    this.progress = 0;
+    this.progress = clamp(spawnWorldX / this.level.length, 0, 1);
     this._prevWorldY = this.player.y;
     if (!soft) this.hooks.onHud?.(this.hudPayload());
   }
@@ -127,6 +170,11 @@ export class Game {
       progress: Math.floor(this.progress * 100),
       best: Math.floor(this.best * 100),
       practice: this.practice,
+      section: this.sectionIndex,
+      sectionName: this.sectionName,
+      sectionTotal: this.level.sections.length,
+      checkpoint: Math.max(0, this.checkpointIndex + 1),
+      bestSection: this.bestSection,
     };
   }
 
@@ -147,7 +195,6 @@ export class Game {
     if (!p.alive) return;
 
     if (p.mode === "ship") {
-      // continuous thrust while held — handled in update
       return;
     }
 
@@ -161,7 +208,6 @@ export class Game {
       return true;
     }
 
-    // Orb jump if overlapping an orb and buffered
     if (this.orbBuffer) {
       const orb = this.findTouching("orb");
       if (orb) {
@@ -200,14 +246,19 @@ export class Game {
       this._last = now;
       if (this.state === "playing") this.update(dt);
       this.draw();
-      if (this.state === "playing" || this.state === "dead" || this.state === "complete" || this.state === "paused" || this.state === "menu") {
+      if (
+        this.state === "playing" ||
+        this.state === "dead" ||
+        this.state === "complete" ||
+        this.state === "paused" ||
+        this.state === "menu"
+      ) {
         this._raf = requestAnimationFrame(tick);
       }
     };
     this._raf = requestAnimationFrame(tick);
   }
 
-  /** Keep rendering menu background when idle */
   startAttract() {
     this.state = "menu";
     this._kickLoop();
@@ -217,12 +268,11 @@ export class Game {
     const p = this.player;
     this._bgPulse += dt;
 
-    // Horizontal auto-run in world space
+    p.vx = CONFIG.SPEED * this.speedMul;
     p.worldX += p.vx * dt;
     this.cameraX = p.worldX - CONFIG.PLAYER_X;
     p.x = CONFIG.PLAYER_X;
 
-    // Vertical physics
     if (p.mode === "ship") {
       const gravity = CONFIG.SHIP_GRAVITY;
       p.vy += gravity * dt;
@@ -236,7 +286,6 @@ export class Game {
     this._prevWorldY = p.y;
     p.y += p.vy * dt;
 
-    // Ground
     p.onGround = false;
     if (p.y + p.h >= CONFIG.GROUND_Y) {
       p.y = CONFIG.GROUND_Y - p.h;
@@ -250,13 +299,11 @@ export class Game {
       this.coyote = Math.max(0, this.coyote - dt);
     }
 
-    // Ceiling for ship
     if (p.y < 40) {
       p.y = 40;
       if (p.vy < 0) p.vy = 0;
     }
 
-    // Rotation
     if (p.mode === "cube" && !p.onGround) {
       p.rotation += CONFIG.ROTATION_SPEED * dt;
     } else if (p.mode === "ship") {
@@ -265,7 +312,6 @@ export class Game {
 
     this.resolveObjects();
 
-    // Buffered jump after landing / coyote window
     if (this.jumpBuffer > 0) {
       this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
       if (p.mode === "cube" && this.tryJump()) {
@@ -284,8 +330,8 @@ export class Game {
 
     if (this._shake > 0) this._shake = Math.max(0, this._shake - dt * 3);
     if (this._flash > 0) this._flash = Math.max(0, this._flash - dt * 3);
+    if (this._checkpointFlash > 0) this._checkpointFlash = Math.max(0, this._checkpointFlash - dt);
 
-    // Trail particles
     if (Math.random() < 0.6) {
       this.particles.push({
         x: p.x + 4,
@@ -300,6 +346,27 @@ export class Game {
     }
   }
 
+  activateCheckpoint(cp, index) {
+    if (index <= this.checkpointIndex) return;
+    this.checkpointIndex = index;
+    this.activeCheckpoint = cp;
+    cp._activated = true;
+    this.sectionIndex = cp.section;
+    this.sectionName = cp.label || `Sezione ${cp.section}`;
+    this.speedMul = cp.speed || this.speedMul;
+    this.player.vx = CONFIG.SPEED * this.speedMul;
+    this._checkpointFlash = 0.7;
+    this.audio.portal();
+    this.burst(cp.x - this.cameraX + cp.w / 2, cp.y + cp.h / 2, 16, COLORS.checkpointActive);
+
+    if (cp.section > this.bestSection) {
+      this.bestSection = cp.section;
+      localStorage.setItem(STORAGE_BEST_SECTION, String(this.bestSection));
+    }
+    this.hooks.onCheckpoint?.(this.hudPayload());
+    this.hooks.onHud?.(this.hudPayload());
+  }
+
   resolveObjects() {
     const p = this.player;
     const box = this.playerWorldBox();
@@ -308,13 +375,18 @@ export class Game {
       if (o._used) continue;
       if (!nearCamera(o, this.cameraX)) continue;
 
+      if (o.type === "checkpoint" && aabb(box, o)) {
+        const idx = this.level.checkpoints.indexOf(o);
+        if (idx >= 0) this.activateCheckpoint(o, idx);
+        continue;
+      }
+
       if (o.type === "spike" && aabb(box, inflate(o, CONFIG.SPIKE_HITBOX_PAD))) {
         this.die();
         return;
       }
 
       if (o.type === "block") {
-        // Slightly smaller player box vs blocks = fewer unfair side clips
         const blockBox = { x: box.x + 4, y: box.y, w: box.w - 8, h: box.h };
         if (!aabb(blockBox, o)) continue;
         const fromTop = this._prevWorldY + p.h <= o.y + 16 && p.vy >= -60;
@@ -330,7 +402,6 @@ export class Game {
           this.die();
           return;
         } else {
-          // Cube side hits: only lethal if deeply overlapping
           const overlapX = Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
           if (overlapX > 12) {
             this.die();
@@ -350,7 +421,12 @@ export class Game {
         p.mode = o.mode;
         this.audio.portal();
         this._flash = 0.35;
-        this.burst(o.x + o.w / 2, o.y + o.h / 2, 20, o.mode === "ship" ? COLORS.portalShip : COLORS.portalCube);
+        this.burst(
+          o.x + o.w / 2,
+          o.y + o.h / 2,
+          20,
+          o.mode === "ship" ? COLORS.portalShip : COLORS.portalCube
+        );
       }
 
       if (o.type === "finish" && box.x + box.w >= o.x) {
@@ -359,7 +435,6 @@ export class Game {
       }
     }
 
-    // Late orb press while overlapping
     if (this.orbBuffer && p.mode === "cube" && !p.onGround) {
       const orb = this.findTouching("orb");
       if (orb) {
@@ -382,13 +457,22 @@ export class Game {
     this._flash = 0.5;
     this.burst(this.player.x + this.player.w / 2, this.player.y + this.player.h / 2, 28, COLORS.spike);
 
-    const delay = this.practice ? 350 : 700;
+    const delay = this.practice ? 350 : 650;
     setTimeout(() => {
       if (this.state !== "dead") return;
       this.attempt += 1;
       localStorage.setItem(STORAGE_ATTEMPTS, String(this.attempt));
-      this.level = createLevel();
-      this.resetPlayer(false);
+      // Respawn at last checkpoint — keep the continuous course
+      const cp = this.activeCheckpoint;
+      if (cp) {
+        this.resetObjectFlagsAfter(cp.x);
+        this.resetPlayer(false, cp);
+      } else {
+        this.clearObjectFlags();
+        this.checkpointIndex = -1;
+        this.activeCheckpoint = null;
+        this.resetPlayer(false);
+      }
       this.state = "playing";
       this.audio.startBed();
       this.hooks.onDeath?.(this.hudPayload());
@@ -400,13 +484,16 @@ export class Game {
     this.state = "complete";
     this.progress = 1;
     this.best = 1;
+    this.bestSection = this.level.sections.length;
     localStorage.setItem(STORAGE_BEST, "1");
+    localStorage.setItem(STORAGE_BEST_SECTION, String(this.bestSection));
     this.audio.win();
     this.audio.stopBed();
     this._flash = 0.6;
     this.hooks.onComplete?.({
       attempt: this.attempt,
       best: 100,
+      sections: this.level.sections.length,
     });
     this.hooks.onHud?.(this.hudPayload());
   }
@@ -448,17 +535,14 @@ export class Game {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
     ctx.translate(shakeX, shakeY);
 
-    // Sky
     const g = ctx.createLinearGradient(0, 0, 0, HEIGHT);
     g.addColorStop(0, COLORS.skyTop);
     g.addColorStop(1, COLORS.skyBottom);
     ctx.fillStyle = g;
     ctx.fillRect(-20, -20, WIDTH + 40, HEIGHT + 40);
 
-    // Parallax grid
     this.drawParallax(ctx);
 
-    // Ground
     ctx.fillStyle = COLORS.ground;
     ctx.fillRect(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y);
     ctx.strokeStyle = COLORS.groundLine;
@@ -468,7 +552,6 @@ export class Game {
     ctx.lineTo(WIDTH, GROUND_Y);
     ctx.stroke();
 
-    // Ground pattern
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y);
@@ -484,14 +567,12 @@ export class Game {
     }
     ctx.restore();
 
-    // Objects
     for (const o of this.level.objects) {
       if (!nearCamera(o, this.cameraX, 80)) continue;
       const sx = o.x - this.cameraX;
       this.drawObject(ctx, o, sx);
     }
 
-    // Particles
     for (const p of this.particles) {
       ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
       ctx.fillStyle = p.color;
@@ -499,18 +580,27 @@ export class Game {
     }
     ctx.globalAlpha = 1;
 
-    // Player
     if (this.player.alive || this.state === "dead") {
       this.drawPlayer(ctx);
     }
 
-    // Flash
     if (this._flash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${this._flash * 0.35})`;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
     }
 
-    // Menu attract vignette text handled by DOM; draw subtle scanlines
+    if (this._checkpointFlash > 0) {
+      ctx.fillStyle = `rgba(57,240,192,${this._checkpointFlash * 0.18})`;
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      ctx.font = "700 28px Orbitron, sans-serif";
+      ctx.fillStyle = `rgba(232,244,255,${clamp(this._checkpointFlash * 1.4, 0, 1)})`;
+      ctx.textAlign = "center";
+      ctx.fillText(`${this.sectionName.toUpperCase()}`, WIDTH / 2, 120);
+      ctx.font = "600 16px Rajdhani, sans-serif";
+      ctx.fillStyle = `rgba(126,231,255,${clamp(this._checkpointFlash * 1.2, 0, 1)})`;
+      ctx.fillText(`CHECKPOINT ${this.sectionIndex}/${this.level.sections.length}`, WIDTH / 2, 150);
+    }
+
     ctx.fillStyle = "rgba(0,0,0,0.05)";
     for (let y = 0; y < HEIGHT; y += 4) {
       ctx.fillRect(0, y, WIDTH, 1);
@@ -545,7 +635,6 @@ export class Game {
       }
     }
 
-    // Floating deco cubes in background
     ctx.save();
     for (let i = 0; i < 6; i++) {
       const x = ((i * 210 - this.cameraX * 0.2) % (WIDTH + 100) + WIDTH + 100) % (WIDTH + 100) - 50;
@@ -607,6 +696,25 @@ export class Game {
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
       ctx.strokeRect(sx, o.y, o.w, o.h);
+    } else if (o.type === "checkpoint") {
+      const active = o._activated;
+      const color = active ? COLORS.checkpointActive : COLORS.checkpoint;
+      const pulse = active ? 1 : 1 + Math.sin(performance.now() / 200) * 0.06;
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(sx + o.w * 0.35, o.y, o.w * 0.3, o.h);
+      ctx.beginPath();
+      ctx.moveTo(sx + o.w * 0.55, o.y + 8);
+      ctx.lineTo(sx + o.w * 0.55 + 34 * pulse, o.y + 22);
+      ctx.lineTo(sx + o.w * 0.55, o.y + 36);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.25;
+      ctx.beginPath();
+      ctx.arc(sx + o.w / 2, o.y + 18, 16 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     } else if (o.type === "finish") {
       const stripe = 14;
       for (let i = 0; i < o.h; i += stripe) {

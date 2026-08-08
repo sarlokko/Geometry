@@ -38,14 +38,17 @@ Apri `http://localhost:8080` nel browser.
 
 ### Meccaniche
 
+- **Corsa continua** — 10 sezioni in un unico percorso
+- **Checkpoint** — alla morte riparti dall’ultimo checkpoint raggiunto
+- **Difficoltà progressiva** — spacing più stretto e velocità che aumenta sezione dopo sezione
 - **Cubo** — salto da terra, rotazione in aria
-- **Spike** — contatto = morte e restart
+- **Spike** — contatto = morte
 - **Pad giallo** — rimbalzo automatico
 - **Orb gialla** — salta mentre la tocchi (anche in aria)
 - **Portale** — passa a modalità nave (hold per salire) e torna al cubo
-- **Practice** — stesso livello con restart più rapido
+- **Practice** — stessa corsa con respawn più rapido
 
-Il progresso migliore e il contatore attempt sono salvati in `localStorage`.
+Il progresso migliore, la sezione migliore e il contatore attempt sono salvati in `localStorage`.
 
 ## Struttura
 
