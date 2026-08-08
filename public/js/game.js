@@ -1,6 +1,6 @@
-import { CONFIG, COLORS } from "./config.js";
-import { createLevel } from "./level.js";
-import { AudioBus } from "./audio.js";
+import { CONFIG, COLORS } from "./config.js?v=10sec";
+import { createLevel } from "./level.js?v=10sec";
+import { AudioBus } from "./audio.js?v=10sec";
 
 const STORAGE_ATTEMPTS = "neon-dash-attempts";
 const STORAGE_BEST = "neon-dash-best";
