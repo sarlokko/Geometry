@@ -12,6 +12,7 @@ const G = CONFIG.GROUND_Y;
 export function createLevel() {
   /** @type {LevelObject[]} */
   const objects = [];
+  const add = (obj) => objects.push(obj);
 
   // Long runway to learn the jump
   addSpike(objects, 1100);
