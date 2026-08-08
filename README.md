@@ -2,7 +2,13 @@
 
 Clone web di **Geometry Dash**: platformer ritmico in cui il cubo corre da solo e tu controlli i salti.
 
-## Come giocare
+## Gioca online
+
+https://sarlokko.github.io/Geometry/
+
+Ogni push su `main` aggiorna automaticamente il sito (branch `gh-pages`).
+
+## Avvio locale
 
 ```bash
 python3 -m http.server 8080
