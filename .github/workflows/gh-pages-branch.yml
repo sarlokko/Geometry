@@ -1,0 +1,33 @@
+name: Deploy online
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'public/**'
+      - '.github/workflows/gh-pages-branch.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy public to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          force_orphan: true
+
+      - name: Verify online deploy
+        run: |
+          sleep 20
+          curl -fsSL "https://sarlokko.github.io/Geometry/js/game.js" | grep -q "createLevel\|class Game\|CONFIG"
+          curl -fsI "https://sarlokko.github.io/Geometry/" | grep -qi "content-type: text/html"
+          echo "Online: https://sarlokko.github.io/Geometry/"
