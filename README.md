@@ -50,7 +50,8 @@ Apri `http://localhost:8080` nel browser.
 - **Spike** — contatto = morte
 - **Pad giallo** — rimbalzo automatico
 - **Orb gialla** — salta mentre la tocchi (anche in aria)
-- **Portale** — passa a modalità nave (hold per salire) e torna al cubo
+- **Portale nave** — full-height; hold per salire
+- **Uscita nave** — a fine sezione il ritorno a **cubo è obbligatorio** (non si può saltare il gate)
 - **Practice** — stessa corsa con respawn più rapido
 
 Il progresso migliore, la sezione migliore e il contatore attempt sono salvati in `localStorage`.
