@@ -1,6 +1,6 @@
-import { CONFIG, COLORS } from "./config.js?v=10sec";
-import { createLevel } from "./level.js?v=10sec";
-import { AudioBus } from "./audio.js?v=10sec";
+import { CONFIG, COLORS } from "./config.js?v=10b";
+import { createLevel } from "./level.js?v=10b";
+import { AudioBus } from "./audio.js?v=10b";
 
 const STORAGE_ATTEMPTS = "neon-dash-attempts";
 const STORAGE_BEST = "neon-dash-best";
@@ -225,7 +225,8 @@ export class Game {
   }
 
   findTouching(type) {
-    const box = inflate(this.playerWorldBox(), 10);
+    const pad = type === "orb" ? CONFIG.ORB_HIT_PAD : 10;
+    const box = inflate(this.playerWorldBox(), pad);
     for (const o of this.level.objects) {
       if (o.type !== type || o._used) continue;
       if (aabb(box, o)) return o;
@@ -410,11 +411,18 @@ export class Game {
         }
       }
 
-      if (o.type === "pad" && aabb(box, o) && p.vy >= -20) {
-        p.vy = CONFIG.PAD_VELOCITY;
-        p.onGround = false;
-        this.audio.pad();
-        this.burst(o.x + o.w / 2, o.y, 12, COLORS.pad);
+      if (o.type === "pad" && !o._used) {
+        // Taller trigger zone so yellow pads catch you reliably while running
+        const padHit = { x: o.x - 4, y: o.y - 18, w: o.w + 8, h: o.h + 22 };
+        if (aabb(box, padHit) && p.vy >= CONFIG.PAD_TRIGGER_VY) {
+          p.vy = CONFIG.PAD_VELOCITY;
+          p.onGround = false;
+          p.y = Math.min(p.y, o.y - p.h + 2);
+          o._used = true;
+          this.jumpBuffer = 0;
+          this.audio.pad();
+          this.burst(o.x - this.cameraX + o.w / 2, o.y, 14, COLORS.pad);
+        }
       }
 
       if (o.type === "portal" && aabb(box, o) && p.mode !== o.mode) {
@@ -665,15 +673,28 @@ export class Game {
       ctx.strokeStyle = "rgba(255,255,255,0.25)";
       ctx.stroke();
     } else if (o.type === "pad") {
+      const pulse = 1 + Math.sin(performance.now() / 140) * 0.05;
       ctx.fillStyle = COLORS.pad;
       ctx.fillRect(sx, o.y, o.w, o.h);
-      ctx.fillStyle = "rgba(255,255,255,0.45)";
-      ctx.fillRect(sx + 4, o.y + 2, o.w - 8, 3);
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.fillRect(sx + 3, o.y + 2, o.w - 6, 4);
+      // Up-arrow chevron so yellow pads read as jump pads
+      ctx.beginPath();
+      ctx.moveTo(sx + o.w / 2, o.y - 10 * pulse);
+      ctx.lineTo(sx + o.w / 2 + 10, o.y + 2);
+      ctx.lineTo(sx + o.w / 2 - 10, o.y + 2);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,216,74,0.9)";
+      ctx.fill();
     } else if (o.type === "orb") {
-      const pulse = 1 + Math.sin(performance.now() / 120) * 0.08;
+      const pulse = 1 + Math.sin(performance.now() / 110) * 0.1;
       const r = (o.w / 2) * pulse;
       const cx = sx + o.w / 2;
       const cy = o.y + o.h / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,216,74,0.18)";
+      ctx.fill();
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fillStyle = COLORS.orb;
@@ -682,8 +703,8 @@ export class Game {
       ctx.strokeStyle = "#fff6b0";
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(20,20,20,0.35)";
+      ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(20,20,20,0.4)";
       ctx.stroke();
     } else if (o.type === "portal") {
       const color = o.mode === "ship" ? COLORS.portalShip : COLORS.portalCube;

@@ -1,4 +1,4 @@
-import { Game } from "./game.js?v=10sec";
+import { Game } from "./game.js?v=10b";
 
 const els = {
   menu: document.getElementById("menu"),

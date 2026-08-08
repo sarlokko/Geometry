@@ -1,4 +1,4 @@
-import { CONFIG } from "./config.js?v=10sec";
+import { CONFIG } from "./config.js?v=10b";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
@@ -20,17 +20,18 @@ export function createLevel() {
   const add = (obj) => objects.push(obj);
   const addBlock = (x, y, w, h) => add({ type: "block", x, y, w, h });
   const addSpike = (x, size = 34) => add({ type: "spike", x, y: G - size, w: size, h: size });
-  const addPad = (x, w = S + 8) => add({ type: "pad", x, y: G - 12, w, h: 12 });
-  const addOrb = (x, y = G - S * 2.4, size = 34) => add({ type: "orb", x, y, w: size, h: size });
+  // Wider / taller pads = easier to catch while running
+  const addPad = (x, w = S + 18) => add({ type: "pad", x, y: G - 16, w, h: 16 });
+  const addOrb = (x, y = G - S * 2.2, size = 38) => add({ type: "orb", x, y, w: size, h: size });
   const addPortal = (x, mode) =>
     add({ type: "portal", x, y: G - S * 3, w: 40, h: S * 3, mode });
 
-  let cursor = 900;
+  let cursor = 700;
 
   const beginSection = (index, name, speed) => {
     const startX = cursor;
-    // Soft runway into the section
-    cursor += 420;
+    // Short lead-in — checkpoint sits close to the first obstacle
+    cursor += 140;
     const cp = {
       type: "checkpoint",
       x: cursor,
@@ -43,7 +44,7 @@ export function createLevel() {
     };
     add(cp);
     checkpoints.push(cp);
-    cursor += 380;
+    cursor += 160;
     return { index, name, startX, speed, markEnd: () => {} };
   };
 
@@ -56,23 +57,23 @@ export function createLevel() {
       endX,
       speed: meta.speed,
     });
-    // Breather between sections
-    cursor += 320;
+    // Short gap before next checkpoint
+    cursor += 160;
   };
 
   // ─── 1. Warm-up ───────────────────────────────────────────────
   {
     const sec = beginSection(1, "Warm-up", 1);
     addSpike(cursor);
+    cursor += 380;
+    addSpike(cursor);
     cursor += 420;
-    addSpike(cursor);
-    cursor += 480;
     addBlock(cursor, G - S, S * 4, S);
-    cursor += S * 4 + 100;
+    cursor += S * 4 + 90;
     addSpike(cursor);
-    cursor += 360;
+    cursor += 320;
     addBlock(cursor, G - S, S * 4, S);
-    cursor += S * 4 + 80;
+    cursor += S * 4 + 70;
     endSection(sec);
   }
 
@@ -82,57 +83,59 @@ export function createLevel() {
     addBlock(cursor, G - S, S * 2, S);
     cursor += S * 2;
     addBlock(cursor, G - S * 2, S * 2, S * 2);
-    cursor += S * 2 + 90;
+    cursor += S * 2 + 80;
     addSpike(cursor);
-    cursor += 400;
+    cursor += 340;
     addBlock(cursor, G - S, S * 2, S);
     cursor += S * 2;
     addBlock(cursor, G - S * 2, S * 2, S * 2);
     cursor += S * 2;
     addBlock(cursor, G - S * 3, S * 2, S * 3);
-    cursor += S * 2 + 110;
+    cursor += S * 2 + 90;
     addSpike(cursor);
-    cursor += 360;
+    cursor += 280;
     endSection(sec);
   }
 
-  // ─── 3. Bounce pads ───────────────────────────────────────────
+  // ─── 3. Bounce pads — arcs tuned to land on ledges ─────────────
   {
     const sec = beginSection(3, "Bounce", 1.05);
     addPad(cursor);
-    cursor += 280;
-    addBlock(cursor, G - S * 2, S * 5, S);
-    cursor += S * 5 + 160;
+    cursor += 250;
+    addBlock(cursor, G - S * 2, S * 6, S);
+    cursor += S * 6 + 120;
     addSpike(cursor);
-    cursor += 300;
+    cursor += 240;
     addPad(cursor);
-    cursor += 260;
-    addBlock(cursor, G - S * 2.5, S * 4, S);
-    cursor += S * 4 + 140;
+    cursor += 240;
+    addBlock(cursor, G - S * 2.5, S * 5, S);
+    cursor += S * 5 + 110;
     addSpike(cursor);
-    cursor += 280;
-    addSpike(cursor);
-    cursor += 340;
+    cursor += 220;
+    addPad(cursor, S + 22);
+    cursor += 230;
+    addBlock(cursor, G - S * 2, S * 4, S);
+    cursor += S * 4 + 100;
     endSection(sec);
   }
 
-  // ─── 4. Orbs ──────────────────────────────────────────────────
+  // ─── 4. Orbs — jump into orb, land on wide ledge ───────────────
   {
     const sec = beginSection(4, "Orbs", 1.08);
     addSpike(cursor);
-    cursor += 180;
-    addOrb(cursor, G - S * 2.4, 34);
-    cursor += 280;
-    addBlock(cursor, G - S, S * 4, S);
-    cursor += S * 4 + 140;
+    cursor += 150;
+    addOrb(cursor, G - S * 2.15, 40);
+    cursor += 240;
+    addBlock(cursor, G - S, S * 5, S);
+    cursor += S * 5 + 110;
     addSpike(cursor);
-    cursor += 120;
+    cursor += 100;
     addSpike(cursor + 70);
-    cursor += 200;
-    addOrb(cursor, G - S * 2.6, 32);
-    cursor += 300;
-    addBlock(cursor, G - S, S * 3, S);
-    cursor += S * 3 + 120;
+    cursor += 170;
+    addOrb(cursor, G - S * 2.35, 38);
+    cursor += 250;
+    addBlock(cursor, G - S, S * 4, S);
+    cursor += S * 4 + 100;
     endSection(sec);
   }
 
@@ -140,25 +143,25 @@ export function createLevel() {
   {
     const sec = beginSection(5, "Mix", 1.12);
     addSpike(cursor);
-    cursor += 280;
-    addBlock(cursor, G - S, S * 3, S);
-    cursor += S * 3 + 60;
-    addSpike(cursor);
-    cursor += 220;
-    addPad(cursor, S + 4);
     cursor += 240;
-    addBlock(cursor, G - S * 3, S * 2, S);
-    cursor += S * 2 + 100;
-    addSpike(cursor);
-    cursor += 160;
-    addOrb(cursor, G - S * 2.5, 30);
-    cursor += 260;
     addBlock(cursor, G - S, S * 3, S);
+    cursor += S * 3 + 50;
+    addSpike(cursor);
+    cursor += 180;
+    addPad(cursor, S + 16);
+    cursor += 230;
+    addBlock(cursor, G - S * 2.8, S * 3, S);
     cursor += S * 3 + 80;
     addSpike(cursor);
-    cursor += 70;
+    cursor += 130;
+    addOrb(cursor, G - S * 2.3, 36);
+    cursor += 230;
+    addBlock(cursor, G - S, S * 3.5, S);
+    cursor += S * 3.5 + 70;
+    addSpike(cursor);
+    cursor += 60;
     addSpike(cursor + 70);
-    cursor += 220;
+    cursor += 180;
     endSection(sec);
   }
 
@@ -193,14 +196,14 @@ export function createLevel() {
     cursor += S * 2.5 + 50;
     addSpike(cursor, 32);
     cursor += 180;
-    addPad(cursor, S);
-    cursor += 200;
-    addBlock(cursor, G - S * 3.2, S * 2, S);
-    cursor += S * 2 + 80;
-    addSpike(cursor, 32);
-    cursor += 100;
-    addOrb(cursor, G - S * 2.7, 28);
+    addPad(cursor, S + 14);
     cursor += 220;
+    addBlock(cursor, G - S * 3, S * 3, S);
+    cursor += S * 3 + 70;
+    addSpike(cursor, 32);
+    cursor += 90;
+    addOrb(cursor, G - S * 2.4, 34);
+    cursor += 210;
     addSpike(cursor, 32);
     cursor += 80;
     addSpike(cursor + 70, 32);
@@ -237,30 +240,30 @@ export function createLevel() {
     cursor += 140;
     addSpike(cursor, 30);
     cursor += 140;
-    addOrb(cursor, G - S * 2.5, 28);
-    cursor += 200;
+    addOrb(cursor, G - S * 2.25, 34);
+    cursor += 190;
     addSpike(cursor, 30);
-    cursor += 160;
-    addPad(cursor, S);
-    cursor += 180;
-    addBlock(cursor, G - S * 2.8, S * 2, S);
-    cursor += S * 2 + 70;
+    cursor += 140;
+    addPad(cursor, S + 12);
+    cursor += 210;
+    addBlock(cursor, G - S * 2.6, S * 2.5, S);
+    cursor += S * 2.5 + 60;
     addSpike(cursor, 30);
-    cursor += 90;
+    cursor += 80;
     addSpike(cursor + 65, 30);
-    cursor += 160;
+    cursor += 140;
     addBlock(cursor, G - S, S * 2, S);
     cursor += S * 2;
     addBlock(cursor, G - S * 2, S * 2, S * 2);
-    cursor += S * 2 + 70;
-    addOrb(cursor, G - S * 2.8, 28);
-    cursor += 220;
-    addSpike(cursor, 30);
-    cursor += 120;
-    addPad(cursor, S);
+    cursor += S * 2 + 60;
+    addOrb(cursor, G - S * 2.5, 34);
     cursor += 200;
-    addBlock(cursor, G - S * 3.4, S * 2, S);
-    cursor += S * 2 + 90;
+    addSpike(cursor, 30);
+    cursor += 100;
+    addPad(cursor, S + 12);
+    cursor += 210;
+    addBlock(cursor, G - S * 3.1, S * 2.5, S);
+    cursor += S * 2.5 + 80;
     endSection(sec);
   }
 
@@ -273,10 +276,10 @@ export function createLevel() {
     cursor += 120;
     addSpike(cursor, 30);
     cursor += 180;
-    addPad(cursor, S);
+    addPad(cursor, S + 14);
+    cursor += 200;
+    addOrb(cursor, G - S * 2.35, 34);
     cursor += 170;
-    addOrb(cursor, G - S * 2.6, 28);
-    cursor += 180;
     addSpike(cursor, 30);
     cursor += 100;
     addBlock(cursor, G - S * 2, S * 2, S * 2);

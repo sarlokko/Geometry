@@ -8,8 +8,11 @@ export const CONFIG = {
   SPEED: 360,
   GRAVITY: 2400,
   JUMP_VELOCITY: -980,
-  PAD_VELOCITY: -1120,
-  ORB_VELOCITY: -1000,
+  // Yellow pad / orb — snappier, more readable arcs
+  PAD_VELOCITY: -1220,
+  ORB_VELOCITY: -1100,
+  ORB_HIT_PAD: 18,
+  PAD_TRIGGER_VY: -90,
   SHIP_THRUST: -2000,
   SHIP_GRAVITY: 1100,
   MAX_FALL: 1300,
@@ -17,10 +20,10 @@ export const CONFIG = {
   // Extra forgiveness (tightens slightly in later sections via level design)
   SPIKE_HITBOX_PAD: -10,
   COYOTE_TIME: 0.09,
-  JUMP_BUFFER: 0.12,
+  JUMP_BUFFER: 0.14,
   // Continuous run
   SECTION_COUNT: 10,
-  CHECKPOINT_RESPAWN_OFFSET: 80,
+  CHECKPOINT_RESPAWN_OFFSET: 56,
 };
 
 export const COLORS = {
