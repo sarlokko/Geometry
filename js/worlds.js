@@ -257,7 +257,7 @@ function buildPads(objects) {
   let x = 900;
   addSpike(objects, x);
   x += 250;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     addPad(objects, x);
     x += 320;
     if (i % 2 === 0) {
@@ -375,7 +375,7 @@ function buildBall(objects) {
 /** 6 — UFO flaps (~35s) */
 function buildUfo(objects) {
   let x = 900;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 8; i++) {
     addSpike(objects, x);
     addSpike(objects, x + 180);
     x += 400;
@@ -445,7 +445,7 @@ function buildMirror(objects) {
 function buildApex(objects) {
   let x = 800;
   // cube intro
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     addSpike(objects, x);
     x += 200;
   }
@@ -454,7 +454,7 @@ function buildApex(objects) {
 
   addPortal(objects, x, "ship");
   x += 280;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     const top = i % 2 === 0;
     const h = 130 + (i % 3) * 15;
     if (top) addBlock(objects, x, 80, S, h);
@@ -466,7 +466,7 @@ function buildApex(objects) {
   x += 200;
   const ballStart = x;
   const apexPads = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 8; i++) {
     apexPads.push(x);
     x += 340;
   }
