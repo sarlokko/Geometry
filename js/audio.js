@@ -3,7 +3,8 @@ export class AudioBus {
   constructor() {
     /** @type {AudioContext | null} */
     this.ctx = null;
-    this.muted = false;
+    this.muted = false; // SFX
+    this.musicMuted = localStorage.getItem("neon-dash-music") === "off";
     this._bedNodes = [];
     this._bedPlaying = false;
     this._wantBed = false;
@@ -38,9 +39,23 @@ export class AudioBus {
 
   toggleMute() {
     this.muted = !this.muted;
-    if (this.muted) this.stopBed();
-    else if (this._wantBed) this.startBed();
     return this.muted;
+  }
+
+  /** Toggle only the rhythmic music bed (SFX stay on). */
+  toggleMusic() {
+    this.musicMuted = !this.musicMuted;
+    localStorage.setItem("neon-dash-music", this.musicMuted ? "off" : "on");
+    if (this.musicMuted) {
+      this._haltBed(false);
+    } else if (this._wantBed) {
+      this.startBed();
+    }
+    return this.musicMuted;
+  }
+
+  isMusicOn() {
+    return !this.musicMuted;
   }
 
   beep(freq, dur = 0.08, type = "square", gain = 0.05) {
@@ -91,7 +106,7 @@ export class AudioBus {
   startBed() {
     this._wantBed = true;
     const ctx = this.ensure();
-    if (!ctx || this.muted || this._bedPlaying) return;
+    if (!ctx || this.musicMuted || this._bedPlaying) return;
 
     const master = ctx.createGain();
     master.gain.value = 0.045;
@@ -113,6 +128,12 @@ export class AudioBus {
 
   stopBed() {
     this._wantBed = false;
+    this._haltBed(true);
+  }
+
+  /** @param {boolean} clearWant */
+  _haltBed(clearWant) {
+    if (clearWant) this._wantBed = false;
     this._bedPlaying = false;
     if (this._scheduler) {
       clearTimeout(this._scheduler);
