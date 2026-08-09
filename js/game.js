@@ -1,6 +1,6 @@
-import { CONFIG } from "./config.js?v=20260809g";
-import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809g";
-import { AudioBus } from "./audio.js?v=20260809g";
+import { CONFIG } from "./config.js?v=20260809h";
+import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809h";
+import { AudioBus } from "./audio.js?v=20260809h";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_BEST_PREFIX = "neon-dash-best-w";
@@ -380,6 +380,11 @@ export class Game {
       if ((p.mode === "cube" || p.mode === "ufo" || p.mode === "ball") && this.tryJump()) {
         /* consumed */
       }
+    }
+
+    // Hold-to-hop: cube keeps jumping on every landing while input is held
+    if (this.held && p.mode === "cube" && (p.onGround || this.coyote > 0)) {
+      this.tryJump();
     }
 
     this.updateParticles(dt);
