@@ -1,4 +1,4 @@
-import { CONFIG } from "./config.js?v=20260809h";
+import { CONFIG } from "./config.js?v=20260809i";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
@@ -54,9 +54,9 @@ export const WORLDS = [
     id: 4,
     name: "Muri",
     subtitle: "Rimbalzo",
-    quirk: "Pallina sui muri: tap per invertire la gravità tra suolo e soffitto.",
-    bpm: 140,
-    speed: 390,
+    quirk: "Tap per invertire la gravità: i tappeti di spike cambiano lato in fretta.",
+    bpm: 146,
+    speed: 420,
     startMode: "ball",
     ballKind: "walls",
     colors: theme("#0a1a22", "#163040", "#6ad0ff", "#1a4a5a", "#9fd8ff"),
@@ -357,37 +357,57 @@ function buildWave(objects) {
 
 /** 4 — Rimbalzo sui muri (tap = flip gravità) */
 function buildWallBall(objects) {
-  // Floor stretch with spikes forcing ceiling flips
-  addSpike(objects, 900);
-  addSpike(objects, 1100);
-  addSpike(objects, 1300);
-  addBlock(objects, 1600, G - S, S * 3, S);
-  addSpike(objects, 1600 + S * 3 + 60);
-  // Force a flip stretch: long spike carpet
-  for (let sx = 2200; sx < 3100; sx += 70) addSpike(objects, sx);
-  addBlock(objects, 3200, C, S * 4, S);
-  addSpikeCeil(objects, 3200 + S * 4 + 50);
-  addSpikeCeil(objects, 3600);
-  // Back to floor via flip
-  for (let sx = 3900; sx < 4700; sx += 70) addSpikeCeil(objects, sx);
-  addSpike(objects, 4900);
-  addBlock(objects, 5200, G - S * 2, S * 2, S);
-  addSpike(objects, 5200 + S * 2 + 70);
-  // Mid platforms as wall surfaces
-  addBlock(objects, 5700, G - S * 3, S * 3, S);
-  addSpike(objects, 6100);
-  addSpike(objects, 6300);
-  for (let sx = 6600; sx < 7600; sx += 70) addSpike(objects, sx);
-  addBlock(objects, 7700, C, S * 5, S);
-  addSpikeCeil(objects, 7700 + S * 5 + 60);
-  addSpikeCeil(objects, 8400);
-  for (let sx = 8700; sx < 9600; sx += 70) addSpikeCeil(objects, sx);
-  addSpike(objects, 9850);
-  addSpike(objects, 10100);
-  addBlock(objects, 10400, G - S, S * 4, S);
-  addSpike(objects, 10400 + S * 4 + 80);
-  addBlock(objects, 11000, G - S, S * 6, S);
-  return 11600;
+  // Alternating lethal carpets — short flip windows, almost no safe cruise
+  addSpike(objects, 480);
+  addSpike(objects, 580);
+  let x = 680;
+  const segs = [
+    { side: "floor", len: 360 },
+    { side: "ceil", len: 280 },
+    { side: "floor", len: 240 },
+    { side: "ceil", len: 320 },
+    { side: "floor", len: 200 },
+    { side: "ceil", len: 260 },
+    { side: "floor", len: 300 },
+    { side: "ceil", len: 220 },
+    { side: "floor", len: 180 },
+    { side: "ceil", len: 280 },
+    { side: "floor", len: 240 },
+    { side: "ceil", len: 200 },
+    { side: "floor", len: 320 },
+    { side: "ceil", len: 260 },
+    { side: "floor", len: 220 },
+    { side: "ceil", len: 300 },
+    { side: "floor", len: 250 },
+    { side: "ceil", len: 240 },
+    { side: "floor", len: 200 },
+    { side: "ceil", len: 280 },
+  ];
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i];
+    const gap = i < 4 ? 48 : 36; // tighter flip windows later
+    if (seg.side === "floor") {
+      for (let sx = x; sx < x + seg.len; sx += 50) addSpike(objects, sx);
+      // Mid blockers punish floating between flips
+      if (i % 3 === 1) addBlock(objects, x + seg.len * 0.4, 200, S, 140);
+      if (i % 4 === 2) addBlock(objects, x + seg.len * 0.7, 260, S, 100);
+    } else {
+      for (let sx = x; sx < x + seg.len; sx += 50) addSpikeCeil(objects, sx);
+      if (i % 3 === 2) addBlock(objects, x + seg.len * 0.35, 300, S, 120);
+      if (i % 5 === 0) addBlock(objects, x + seg.len * 0.65, 240, S, 110);
+    }
+    x += seg.len + gap;
+  }
+  // Fake calm then sudden double switch
+  addSpike(objects, x + 40);
+  addSpike(objects, x + 140);
+  for (let sx = x + 280; sx < x + 560; sx += 48) addSpike(objects, sx);
+  for (let sx = x + 620; sx < x + 900; sx += 48) addSpikeCeil(objects, sx);
+  for (let sx = x + 960; sx < x + 1240; sx += 48) addSpike(objects, sx);
+  addBlock(objects, x + 1320, G - S, S * 3, S);
+  addSpike(objects, x + 1320 + S * 3 + 60);
+  addBlock(objects, x + 1600, G - S, S * 5, S);
+  return x + 2100;
 }
 
 /**
