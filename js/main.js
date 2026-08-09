@@ -15,6 +15,7 @@ const els = {
   btnNext: document.getElementById("btn-next"),
   quirk: document.getElementById("quirk"),
   selectedQuirk: document.getElementById("selected-quirk"),
+  btnMusic: document.getElementById("btn-music"),
   canvas: document.getElementById("game"),
 };
 
@@ -117,6 +118,20 @@ function play(worldId = selectedWorld) {
   els.hud.classList.remove("hidden");
   game.start(worldId);
 }
+
+function syncMusicButton() {
+  const on = game.audio.isMusicOn();
+  els.btnMusic.textContent = on ? "Musica: ON" : "Musica: OFF";
+  els.btnMusic.setAttribute("aria-pressed", on ? "true" : "false");
+  els.btnMusic.title = on ? "Disattiva musica" : "Attiva musica";
+}
+
+els.btnMusic.addEventListener("click", (e) => {
+  e.stopPropagation();
+  game.audio.ensure();
+  game.audio.toggleMusic();
+  syncMusicButton();
+});
 
 document.getElementById("btn-play").addEventListener("click", () => play(selectedWorld));
 document.getElementById("btn-resume").addEventListener("click", () => {
@@ -223,6 +238,7 @@ window.addEventListener("touchend", release);
 const unlockParam = new URLSearchParams(location.search).get("unlock");
 if (unlockParam != null) game.setUnlocked(unlockParam);
 
+syncMusicButton();
 renderWorldGrid();
 game.startAttract();
 showOverlay("menu");
