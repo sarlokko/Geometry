@@ -18,8 +18,10 @@ export const CONFIG = {
   COYOTE_TIME: 0.09,
   JUMP_BUFFER: 0.12,
   // Mode-specific
+  // Hang ≈ 0.85s → ~340px at Neverland speed 400; pads are spaced/widen around that
   BALL_BOUNCE: -1020,
-  BALL_SIZE: 36,
+  BALL_SIZE: 34,
+  BALL_TAP_BOOST: -460,
   UFO_FLAP: -720,
   UFO_GRAVITY: 1550,
   WAVE_VY: 520,

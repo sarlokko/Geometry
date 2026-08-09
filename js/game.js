@@ -140,7 +140,8 @@ export class Game {
     if (mode === "ship" || mode === "ufo" || mode === "wave") {
       y = CONFIG.GROUND_Y * 0.45;
     } else if (mode === "ball") {
-      y = CONFIG.GROUND_Y - 220;
+      // Start above the first pad with a clean arc (must not smack the ceiling)
+      y = CONFIG.GROUND_Y - 170;
       vy = CONFIG.BALL_BOUNCE;
     }
 
@@ -166,6 +167,7 @@ export class Game {
     this.coyote = CONFIG.COYOTE_TIME;
     this.jumpBuffer = 0;
     this._padLock = 0;
+    this._ballTapLock = 0;
     this._shake = 0;
     this._flash = 0;
     this.progress = 0;
@@ -215,15 +217,27 @@ export class Game {
     }
 
     if (p.mode === "ball") {
-      // Ball only gets air control via orbs
+      // Small tap boost (recovery) + orb launches
       if (this.orbBuffer) {
         const orb = this.findTouching("orb");
         if (orb) {
           p.vy = CONFIG.ORB_VELOCITY * p.gravityDir;
           this.orbBuffer = false;
+          this.jumpBuffer = 0;
           orb._used = true;
           this.audio.orb();
           this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, this.colors.orb);
+          return true;
+        }
+      }
+      if (!this._ballTapLock || this._ballTapLock <= 0) {
+        // Only help while falling — keeps pad rhythm as the main mechanic
+        if (p.vy > 80) {
+          p.vy = Math.min(p.vy, 0) + CONFIG.BALL_TAP_BOOST;
+          this._ballTapLock = 0.35;
+          this.jumpBuffer = 0;
+          this.audio.jump();
+          this.burst(p.x + p.w / 2, p.y + p.h / 2, 5, this.colors.playerBall);
           return true;
         }
       }
@@ -302,6 +316,7 @@ export class Game {
     const world = this.level.world;
     this._bgPulse += dt;
     if (this._padLock > 0) this._padLock = Math.max(0, this._padLock - dt);
+    if (this._ballTapLock > 0) this._ballTapLock = Math.max(0, this._ballTapLock - dt);
 
     p.worldX += p.vx * dt;
     this.cameraX = p.worldX - CONFIG.PLAYER_X;
@@ -329,7 +344,7 @@ export class Game {
 
     if (this.jumpBuffer > 0) {
       this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
-      if ((p.mode === "cube" || p.mode === "ufo") && this.tryJump()) {
+      if ((p.mode === "cube" || p.mode === "ufo" || p.mode === "ball") && this.tryJump()) {
         /* consumed */
       }
     }
@@ -439,11 +454,9 @@ export class Game {
         this.coyote = CONFIG.COYOTE_TIME;
         p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
       } else if (p.mode === "ball") {
+        // Soft ceiling clamp — only ceiling pads should reverse the bounce
         p.y = CONFIG.CEILING_Y;
-        if (p.vy < 0) {
-          p.vy = -CONFIG.BALL_BOUNCE * 0.75;
-          this.audio.pad();
-        }
+        if (p.vy < 0) p.vy *= -0.25;
       } else {
         p.y = CONFIG.CEILING_Y;
         if (p.vy < 0) p.vy = 0;
@@ -473,7 +486,30 @@ export class Game {
         const blockBox = { x: box.x + 4, y: box.y, w: box.w - 8, h: box.h };
         if (!aabb(blockBox, o)) continue;
 
-        if (p.mode === "wave" || p.mode === "ball") {
+        // Ball treats solid blocks as bounce surfaces (not instant death)
+        if (p.mode === "ball") {
+          const fromTop = this._prevWorldY + p.h <= o.y + 14 && p.vy >= 0;
+          const fromBottom = this._prevWorldY >= o.y + o.h - 14 && p.vy <= 0;
+          if (fromTop) {
+            p.y = o.y - p.h;
+            p.vy = CONFIG.BALL_BOUNCE;
+            this._padLock = 0.1;
+            this.audio.pad();
+            this.burst(o.x + o.w / 2, o.y, 8, C.pad);
+          } else if (fromBottom) {
+            p.y = o.y + o.h;
+            p.vy = -CONFIG.BALL_BOUNCE * 0.85;
+            this._padLock = 0.1;
+            this.audio.pad();
+            this.burst(o.x + o.w / 2, o.y + o.h, 8, C.pad);
+          } else {
+            this.die();
+            return;
+          }
+          continue;
+        }
+
+        if (p.mode === "wave") {
           this.die();
           return;
         }
@@ -517,17 +553,29 @@ export class Game {
         }
       }
 
-      if (o.type === "pad" && aabb(box, o) && this._padLock <= 0) {
-        const dir = o.dir || 1;
-        const fallingOnto = dir === 1 ? p.vy >= -30 : p.vy <= 30;
-        if (fallingOnto || p.mode === "ball") {
-          // dir 1 = bounce up (negative y), dir -1 = bounce down
-          const strength = p.mode === "ball" ? CONFIG.BALL_BOUNCE : CONFIG.PAD_VELOCITY;
-          p.vy = strength * dir;
-          p.onGround = false;
-          this._padLock = 0.12;
-          this.audio.pad();
-          this.burst(o.x + o.w / 2, o.y + o.h / 2, 12, C.pad);
+      if (o.type === "pad" && this._padLock <= 0) {
+        // Ball gets a slightly taller/wider pad catch window for fair bounces
+        const padHit =
+          p.mode === "ball" ? inflate(o, 14) : o;
+        if (!aabb(box, padHit)) {
+          /* miss */
+        } else {
+          const dir = o.dir || 1;
+          // Only bounce when approaching the pad from the correct side
+          const approaching = dir === 1 ? p.vy >= -20 : p.vy <= 20;
+          if (approaching) {
+            const strength = p.mode === "ball" ? CONFIG.BALL_BOUNCE : CONFIG.PAD_VELOCITY;
+            p.vy = strength * dir;
+            p.onGround = false;
+            // Nudge off the pad so we don't immediately re-collide
+            if (p.mode === "ball") {
+              if (dir === 1) p.y = Math.min(p.y, o.y - p.h - 1);
+              else p.y = Math.max(p.y, o.y + o.h + 1);
+            }
+            this._padLock = 0.14;
+            this.audio.pad();
+            this.burst(o.x + o.w / 2, o.y + o.h / 2, 12, C.pad);
+          }
         }
       }
 
