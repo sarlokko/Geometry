@@ -1,12 +1,12 @@
-import { CONFIG } from "./config.js?v=20260809j";
+import { CONFIG } from "./config.js?v=20260809l";
 import {
   WORLDS,
   createWorldLevel,
   clampWorld,
   clampStage,
   STAGE_COUNT,
-} from "./worlds.js?v=20260809j";
-import { AudioBus } from "./audio.js?v=20260809j";
+} from "./worlds.js?v=20260809l";
+import { AudioBus } from "./audio.js?v=20260809l";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
