@@ -177,210 +177,334 @@ export function clampWorld(id) {
   return Math.max(0, Math.min(WORLDS.length - 1, Math.floor(n)));
 }
 
-/** 0 — Solo cubo: spike e blocchi semplici */
+/** 0 — Solo cubo: spike e blocchi semplici (~35s) */
 function buildAurora(objects) {
-  addSpike(objects, 1100);
-  addSpike(objects, 1600);
-  addBlock(objects, 2100, G - S, S * 4, S);
-  addSpike(objects, 2100 + S * 4 + 110);
-  addSpike(objects, 2800);
-  addBlock(objects, 3200, G - S, S * 3, S);
-  addSpike(objects, 3700);
-  addSpike(objects, 4100);
-  addBlock(objects, 4500, G - S, S * 5, S);
-  addSpike(objects, 5100);
-  return 5500;
+  let x = 1000;
+  // Warm-up singles
+  for (let i = 0; i < 6; i++) {
+    addSpike(objects, x);
+    x += 420 + (i % 3) * 40;
+  }
+  // Platform islands
+  for (let i = 0; i < 4; i++) {
+    addBlock(objects, x, G - S, S * (3 + (i % 2)), S);
+    addSpike(objects, x + S * 3 + 90);
+    x += S * 4 + 380;
+    addSpike(objects, x);
+    x += 350;
+  }
+  // Double spike packs
+  for (let i = 0; i < 5; i++) {
+    addSpike(objects, x);
+    addSpike(objects, x + 160);
+    x += 480;
+  }
+  // Stairs + landing
+  addBlock(objects, x, G - S, S * 2, S);
+  addBlock(objects, x + S * 2, G - S * 2, S * 2, S * 2);
+  x += S * 4 + 100;
+  addSpike(objects, x);
+  x += 320;
+  addSpike(objects, x);
+  x += 280;
+  addBlock(objects, x, G - S, S * 5, S);
+  x += S * 5 + 200;
+  for (let i = 0; i < 4; i++) {
+    addSpike(objects, x);
+    x += 300 + i * 20;
+  }
+  addBlock(objects, x, G - S, S * 6, S);
+  return x + S * 6 + 350;
 }
 
-/** 1 — Cubo mini: piattaforme strette */
+/** 1 — Cubo mini: piattaforme strette (~35s) */
 function buildMicro(objects) {
   const s = S * CONFIG.MINI_SCALE;
-  addSpike(objects, 900);
-  addBlock(objects, 1200, G - s, s * 2, s);
-  addSpike(objects, 1200 + s * 2 + 50);
-  addBlock(objects, 1550, G - s * 2, s * 2, s);
-  addBlock(objects, 1550 + s * 2 + 70, G - s * 3, s * 2, s);
-  addBlock(objects, 1550 + s * 4 + 140, G - s * 2, s * 2, s);
-  addSpike(objects, 2200);
-  addSpike(objects, 2380);
-  addBlock(objects, 2600, G - s, s, s);
-  addBlock(objects, 2600 + s + 60, G - s * 2, s, s);
-  addBlock(objects, 2600 + s * 2 + 120, G - s, s * 2, s);
-  addSpike(objects, 3200);
-  addBlock(objects, 3450, G - s * 2, s * 3, s);
-  addSpike(objects, 3450 + s * 3 + 40);
-  addSpike(objects, 4000);
-  addSpike(objects, 4150);
-  addBlock(objects, 4400, G - s, s * 4, s);
-  return 4900;
-}
-
-/** 2 — Solo pad */
-function buildPads(objects) {
-  addSpike(objects, 900);
-  addPad(objects, 1150);
-  addBlock(objects, 1450, G - S * 2, S * 3, S);
-  addSpike(objects, 1450 + S * 3 + 45);
-  addPad(objects, 1900);
-  addBlock(objects, 2200, G - S * 3, S * 2, S);
-  addSpike(objects, 2550);
-  addPad(objects, 2800);
-  addPad(objects, 3100);
-  addBlock(objects, 3400, G - S * 2, S * 3, S);
-  addSpike(objects, 3850);
-  addPad(objects, 4100);
-  addBlock(objects, 4450, G - S, S * 4, S);
-  addSpike(objects, 5000);
-  return 5400;
-}
-
-/** 3 — Orb chain */
-function buildOrbs(objects) {
-  addSpike(objects, 900);
-  addSpike(objects, 1100);
-  addOrb(objects, 1300, G - S * 2.3);
-  addBlock(objects, 1650, G - S, S * 2, S);
-  addSpike(objects, 2000);
-  addOrb(objects, 2200, G - S * 2.6);
-  addSpike(objects, 2500);
-  addOrb(objects, 2750, G - S * 3);
-  addBlock(objects, 3100, G - S * 2, S * 3, S);
-  addSpike(objects, 3550);
-  addOrb(objects, 3750, G - S * 2.2);
-  addOrb(objects, 4050, G - S * 2.8);
-  addBlock(objects, 4400, G - S, S * 3, S);
-  addSpike(objects, 4900);
-  return 5300;
-}
-
-/** 4 — Full ship corridor */
-function buildShip(objects) {
-  // Open runway then obstacles
-  addBlock(objects, 1000, 80, S, 130);
-  addBlock(objects, 1350, G - 140, S, 140);
-  addBlock(objects, 1700, 80, S, 150);
-  addBlock(objects, 2050, G - 150, S, 150);
-  addBlock(objects, 2400, 90, S, 160);
-  addBlock(objects, 2750, G - 130, S, 130);
-  addBlock(objects, 3100, 80, S, 140);
-  addBlock(objects, 3450, G - 160, S, 160);
-  addBlock(objects, 3800, 100, S, 150);
-  addBlock(objects, 4150, G - 140, S, 140);
-  addBlock(objects, 4500, 85, S, 170);
-  return 5000;
-}
-
-/** 5 — Ball: bounce pads, never touch ground */
-function buildBall(objects) {
-  // Pads spaced for ~450 speed + bounce hang-time (~0.9–1.1s)
-  const floorPads = [720, 1100, 1480, 1860, 2240, 2700, 3200, 3700, 4200, 4700];
-  const ceilPads = [1300, 2050, 2950, 3450, 3950, 4450];
-
-  // Spikes in the gaps — keep clear of pad footprints
-  for (let x = 600; x < 5100; x += 70) {
-    const onPad = floorPads.some((px) => x > px - 30 && x < px + S + 40);
-    if (!onPad) addSpike(objects, x);
+  let x = 900;
+  addSpike(objects, x);
+  x += 280;
+  for (let i = 0; i < 3; i++) {
+    addBlock(objects, x, G - s, s * 2, s);
+    addSpike(objects, x + s * 2 + 45);
+    x += s * 2 + 280;
+    addBlock(objects, x, G - s * 2, s * 2, s);
+    addBlock(objects, x + s * 2 + 60, G - s * 3, s * 2, s);
+    addBlock(objects, x + s * 4 + 120, G - s * 2, s * 2, s);
+    x += s * 6 + 320;
+    addSpike(objects, x);
+    addSpike(objects, x + 140);
+    x += 360;
   }
-
-  for (const x of floorPads) addPad(objects, x);
-  for (const x of ceilPads) addCeilingPad(objects, x);
-
-  // floating dodge block mid-air
-  addBlock(objects, 2500, G - S * 3.4, S * 1.4, S);
-  return 5200;
+  for (let i = 0; i < 6; i++) {
+    addBlock(objects, x, G - s * (1 + (i % 3)), s * (1 + (i % 2)), s);
+    x += s * 2 + 70 + (i % 2) * 30;
+  }
+  x += 120;
+  for (let i = 0; i < 5; i++) {
+    addSpike(objects, x);
+    x += 200 + (i % 2) * 40;
+  }
+  addBlock(objects, x, G - s * 2, s * 3, s);
+  x += s * 3 + 80;
+  addSpike(objects, x);
+  x += 280;
+  addBlock(objects, x, G - s, s * 4, s);
+  return x + s * 4 + 400;
 }
 
-/** 6 — UFO flaps */
-function buildUfo(objects) {
-  addSpike(objects, 900);
-  addSpike(objects, 1150);
-  addBlock(objects, 1450, G - S * 2, S * 2, S);
-  addSpike(objects, 1800);
-  addBlock(objects, 2100, 80, S * 6, 90);
-  addSpike(objects, 2100 + S * 3);
-  addSpike(objects, 2500);
-  addSpike(objects, 2700);
-  addBlock(objects, 3000, G - S * 3, S * 2, S);
-  addBlock(objects, 3000 + S * 2 + 80, 80, S * 5, 100);
-  addSpike(objects, 3600);
-  addSpike(objects, 3800);
-  addSpike(objects, 4000);
-  addBlock(objects, 4300, G - S * 2, S * 3, S);
-  addSpike(objects, 4800);
-  return 5200;
-}
-
-/** 7 — Wave zigzag tunnel */
-function buildWave(objects) {
-  let x = 800;
-  for (let i = 0; i < 12; i++) {
-    const top = i % 2 === 0;
-    const h = 150 + (i % 3) * 25;
-    if (top) addBlock(objects, x, C, S + 8, h);
-    else addBlock(objects, x, G - h, S + 8, h);
-    // opposite soft hazard
-    if (top) addBlock(objects, x + 120, G - 90, S, 90);
-    else addBlock(objects, x + 120, C, S, 90);
+/** 2 — Solo pad (~35s) */
+function buildPads(objects) {
+  let x = 900;
+  addSpike(objects, x);
+  x += 250;
+  for (let i = 0; i < 8; i++) {
+    addPad(objects, x);
+    x += 320;
+    if (i % 2 === 0) {
+      addBlock(objects, x, G - S * (2 + (i % 2)), S * (2 + (i % 2)), S);
+      x += S * 3 + 120;
+      addSpike(objects, x);
+      x += 220;
+    } else {
+      addSpike(objects, x);
+      x += 200;
+      addPad(objects, x);
+      x += 340;
+    }
+  }
+  for (let i = 0; i < 4; i++) {
+    addPad(objects, x);
     x += 280;
   }
-  return x + 200;
+  addBlock(objects, x, G - S, S * 5, S);
+  x += S * 5 + 180;
+  addSpike(objects, x);
+  x += 300;
+  addPad(objects, x);
+  x += 360;
+  addBlock(objects, x, G - S * 2, S * 4, S);
+  return x + S * 4 + 400;
 }
 
-/** 8 — Gravity flip cube */
-function buildMirror(objects) {
-  addSpike(objects, 900);
-  addSpike(objects, 1150);
-  addBlock(objects, 1450, G - S, S * 3, S);
-  addPortal(objects, 1850, "flip");
-  // while inverted: ceiling is floor — put spikes on ceiling
-  addSpikeCeil(objects, 2200);
-  addSpikeCeil(objects, 2450);
-  addBlock(objects, 2750, C, S * 3, S);
-  addSpikeCeil(objects, 2750 + S * 3 + 50);
-  addPortal(objects, 3300, "flip");
-  addSpike(objects, 3650);
-  addSpike(objects, 3850);
-  addBlock(objects, 4150, G - S * 2, S * 3, S);
-  addPortal(objects, 4600, "flip");
-  addSpikeCeil(objects, 4950);
-  addBlock(objects, 5200, C, S * 4, S);
-  addPortal(objects, 5600, "flip");
-  addSpike(objects, 5950);
-  return 6400;
-}
-
-/** 9 — Mode roulette */
-function buildApex(objects) {
-  // cube intro
-  addSpike(objects, 800);
-  addSpike(objects, 1000);
-  addBlock(objects, 1250, G - S, S * 2, S);
-  addPortal(objects, 1600, "ship");
-  addBlock(objects, 1900, 80, S, 140);
-  addBlock(objects, 2200, G - 140, S, 140);
-  addBlock(objects, 2500, 90, S, 150);
-  addPortal(objects, 2850, "ball");
-  // ball segment — pads + floor spikes (clear of pads)
-  const apexPads = [3050, 3350, 3850];
-  for (let x = 3000; x < 3900; x += 80) {
-    if (!apexPads.some((px) => x > px - 30 && x < px + S + 40)) addSpike(objects, x);
+/** 3 — Orb chain (~35s) */
+function buildOrbs(objects) {
+  let x = 900;
+  addSpike(objects, x);
+  addSpike(objects, x + 180);
+  x += 400;
+  for (let i = 0; i < 7; i++) {
+    addOrb(objects, x, G - S * (2.2 + (i % 3) * 0.35));
+    x += 280;
+    addSpike(objects, x);
+    x += 200;
+    if (i % 2 === 0) {
+      addBlock(objects, x, G - S * (1 + (i % 2)), S * 2, S);
+      x += S * 2 + 160;
+    } else {
+      addSpike(objects, x);
+      x += 180;
+      addOrb(objects, x, G - S * 2.7);
+      x += 300;
+    }
   }
-  for (const x of apexPads) addPad(objects, x);
-  addCeilingPad(objects, 3600);
-  addPortal(objects, 4150, "ufo");
-  addSpike(objects, 4450);
-  addSpike(objects, 4650);
-  addBlock(objects, 4900, 80, S * 5, 100);
-  addPortal(objects, 5300, "wave");
-  addBlock(objects, 5600, C, S, 160);
-  addBlock(objects, 5880, G - 160, S, 160);
-  addBlock(objects, 6160, C, S, 180);
-  addBlock(objects, 6440, G - 150, S, 150);
-  addPortal(objects, 6750, "cube");
-  addSpike(objects, 7050);
-  addSpike(objects, 7200);
-  addBlock(objects, 7450, G - S, S * 4, S);
-  return 7900;
+  addBlock(objects, x, G - S * 2, S * 3, S);
+  x += S * 3 + 140;
+  addOrb(objects, x, G - S * 2.4);
+  x += 320;
+  addSpike(objects, x);
+  addSpike(objects, x + 150);
+  x += 400;
+  addOrb(objects, x, G - S * 3);
+  x += 340;
+  addBlock(objects, x, G - S, S * 4, S);
+  return x + S * 4 + 400;
+}
+
+/** 4 — Full ship corridor (~35s) */
+function buildShip(objects) {
+  let x = 900;
+  for (let i = 0; i < 22; i++) {
+    const top = i % 2 === 0;
+    const h = 120 + (i % 4) * 18;
+    if (top) addBlock(objects, x, 70 + (i % 3) * 10, S, h);
+    else addBlock(objects, x, G - h, S, h);
+    x += 300 + (i % 3) * 20;
+  }
+  // tighter finale
+  for (let i = 0; i < 6; i++) {
+    const top = i % 2 === 0;
+    const h = 150 + (i % 2) * 20;
+    if (top) addBlock(objects, x, 80, S, h);
+    else addBlock(objects, x, G - h, S, h);
+    x += 260;
+  }
+  return x + 350;
+}
+
+/** 5 — Ball: bounce pads, never touch ground (~35s) */
+function buildBall(objects) {
+  const floorPads = [];
+  const ceilPads = [];
+  let x = 700;
+  for (let i = 0; i < 18; i++) {
+    floorPads.push(x);
+    x += 360 + (i % 3) * 20;
+    if (i % 2 === 0) {
+      ceilPads.push(x - 160);
+    }
+  }
+  const end = x + 200;
+
+  for (let sx = 600; sx < end; sx += 70) {
+    const onPad = floorPads.some((px) => sx > px - 30 && sx < px + S + 40);
+    if (!onPad) addSpike(objects, sx);
+  }
+
+  for (const px of floorPads) addPad(objects, px);
+  for (const px of ceilPads) addCeilingPad(objects, px);
+
+  // mid-air dodge blocks
+  addBlock(objects, 2500, G - S * 3.4, S * 1.4, S);
+  addBlock(objects, 4200, G - S * 3.6, S * 1.2, S);
+  addBlock(objects, 6100, G - S * 3.2, S * 1.4, S);
+  return end;
+}
+
+/** 6 — UFO flaps (~35s) */
+function buildUfo(objects) {
+  let x = 900;
+  for (let i = 0; i < 5; i++) {
+    addSpike(objects, x);
+    addSpike(objects, x + 180);
+    x += 400;
+    addBlock(objects, x, G - S * (2 + (i % 2)), S * 2, S);
+    x += S * 2 + 200;
+    // ceiling overhang
+    addBlock(objects, x, 80, S * (4 + (i % 2)), 90 + (i % 3) * 10);
+    addSpike(objects, x + S * 2);
+    x += S * 5 + 220;
+    addSpike(objects, x);
+    addSpike(objects, x + 160);
+    addSpike(objects, x + 320);
+    x += 500;
+  }
+  addBlock(objects, x, G - S * 2, S * 3, S);
+  x += S * 3 + 160;
+  addSpike(objects, x);
+  x += 280;
+  addBlock(objects, x, 80, S * 6, 100);
+  return x + S * 6 + 400;
+}
+
+/** 7 — Wave zigzag tunnel (~35s) */
+function buildWave(objects) {
+  let x = 800;
+  for (let i = 0; i < 28; i++) {
+    const top = i % 2 === 0;
+    const h = 140 + (i % 4) * 22;
+    if (top) addBlock(objects, x, C, S + 8, h);
+    else addBlock(objects, x, G - h, S + 8, h);
+    if (top) addBlock(objects, x + 120, G - 90 - (i % 3) * 10, S, 90 + (i % 3) * 10);
+    else addBlock(objects, x + 120, C, S, 90 + (i % 3) * 10);
+    x += 270 + (i % 3) * 15;
+  }
+  return x + 250;
+}
+
+/** 8 — Gravity flip cube (~38s) */
+function buildMirror(objects) {
+  let x = 900;
+  for (let cycle = 0; cycle < 4; cycle++) {
+    addSpike(objects, x);
+    addSpike(objects, x + 180);
+    x += 400;
+    addBlock(objects, x, G - S * (1 + (cycle % 2)), S * 3, S);
+    x += S * 3 + 160;
+    addPortal(objects, x, "flip");
+    x += 320;
+    // inverted section
+    addSpikeCeil(objects, x);
+    addSpikeCeil(objects, x + 180);
+    x += 400;
+    addBlock(objects, x, C, S * 3, S);
+    addSpikeCeil(objects, x + S * 3 + 50);
+    x += S * 4 + 200;
+    addPortal(objects, x, "flip");
+    x += 300;
+  }
+  addSpike(objects, x);
+  addSpike(objects, x + 160);
+  x += 380;
+  addBlock(objects, x, G - S, S * 5, S);
+  return x + S * 5 + 400;
+}
+
+/** 9 — Mode roulette (~40s) */
+function buildApex(objects) {
+  let x = 800;
+  // cube intro
+  for (let i = 0; i < 4; i++) {
+    addSpike(objects, x);
+    x += 200;
+  }
+  addBlock(objects, x, G - S, S * 2, S);
+  x += S * 2 + 180;
+
+  addPortal(objects, x, "ship");
+  x += 280;
+  for (let i = 0; i < 8; i++) {
+    const top = i % 2 === 0;
+    const h = 130 + (i % 3) * 15;
+    if (top) addBlock(objects, x, 80, S, h);
+    else addBlock(objects, x, G - h, S, h);
+    x += 280;
+  }
+
+  addPortal(objects, x, "ball");
+  x += 200;
+  const ballStart = x;
+  const apexPads = [];
+  for (let i = 0; i < 6; i++) {
+    apexPads.push(x);
+    x += 340;
+  }
+  for (let sx = ballStart - 40; sx < x; sx += 80) {
+    if (!apexPads.some((px) => sx > px - 30 && sx < px + S + 40)) addSpike(objects, sx);
+  }
+  for (const px of apexPads) addPad(objects, px);
+  addCeilingPad(objects, apexPads[2] + 160);
+  addCeilingPad(objects, apexPads[4] + 160);
+
+  addPortal(objects, x, "ufo");
+  x += 280;
+  for (let i = 0; i < 5; i++) {
+    addSpike(objects, x);
+    addSpike(objects, x + 170);
+    x += 360;
+    if (i % 2 === 0) {
+      addBlock(objects, x, 80, S * 5, 100);
+      x += S * 5 + 160;
+    }
+  }
+
+  addPortal(objects, x, "wave");
+  x += 260;
+  for (let i = 0; i < 10; i++) {
+    const top = i % 2 === 0;
+    const h = 150 + (i % 3) * 18;
+    if (top) addBlock(objects, x, C, S, h);
+    else addBlock(objects, x, G - h, S, h);
+    x += 260;
+  }
+
+  addPortal(objects, x, "cube");
+  x += 280;
+  for (let i = 0; i < 6; i++) {
+    addSpike(objects, x);
+    x += 180 + (i % 2) * 30;
+  }
+  addBlock(objects, x, G - S, S * 5, S);
+  return x + S * 5 + 400;
 }
 
 function add(objects, o) {
