@@ -709,5 +709,7 @@ function addOrb(objects, x, y) {
 }
 
 function addPortal(objects, x, mode) {
-  objects.push({ type: "portal", x, y: G - S * 3, w: 40, h: S * 3, mode });
+  // Full-height gate: cannot fly over / under a mode or gravity portal
+  const h = G - C;
+  objects.push({ type: "portal", x, y: C, w: 44, h, mode });
 }
