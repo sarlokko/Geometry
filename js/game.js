@@ -754,6 +754,10 @@ export class Game {
     if (this.state !== "playing") return;
     this.state = "dead";
     this.player.alive = false;
+    if (this._bestDirty) {
+      this._bestDirty = false;
+      this.saveBest(this.worldId, this.stage, this.best);
+    }
     this.audio.die();
     this.audio.stopBed();
     this._shake = 0.45;
@@ -787,6 +791,7 @@ export class Game {
     this.state = "complete";
     this.progress = 1;
     this.best = 1;
+    this._bestDirty = false;
     this.saveBest(this.worldId, this.stage, 1);
 
     let unlockNote = "";
