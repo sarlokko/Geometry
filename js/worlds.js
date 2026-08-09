@@ -223,7 +223,7 @@ function buildMicro(objects) {
   let x = 900;
   addSpike(objects, x);
   x += 280;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     addBlock(objects, x, G - s, s * 2, s);
     addSpike(objects, x + s * 2 + 45);
     x += s * 2 + 280;
@@ -235,12 +235,12 @@ function buildMicro(objects) {
     addSpike(objects, x + 140);
     x += 360;
   }
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 10; i++) {
     addBlock(objects, x, G - s * (1 + (i % 3)), s * (1 + (i % 2)), s);
     x += s * 2 + 70 + (i % 2) * 30;
   }
   x += 120;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 8; i++) {
     addSpike(objects, x);
     x += 200 + (i % 2) * 40;
   }
@@ -292,7 +292,7 @@ function buildOrbs(objects) {
   addSpike(objects, x);
   addSpike(objects, x + 180);
   x += 400;
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 12; i++) {
     addOrb(objects, x, G - S * (2.2 + (i % 3) * 0.35));
     x += 280;
     addSpike(objects, x);
@@ -323,7 +323,7 @@ function buildOrbs(objects) {
 /** 4 — Full ship corridor (~35s) */
 function buildShip(objects) {
   let x = 900;
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 34; i++) {
     const top = i % 2 === 0;
     const h = 120 + (i % 4) * 18;
     if (top) addBlock(objects, x, 70 + (i % 3) * 10, S, h);
@@ -331,7 +331,7 @@ function buildShip(objects) {
     x += 300 + (i % 3) * 20;
   }
   // tighter finale
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 10; i++) {
     const top = i % 2 === 0;
     const h = 150 + (i % 2) * 20;
     if (top) addBlock(objects, x, 80, S, h);
@@ -346,7 +346,7 @@ function buildBall(objects) {
   const floorPads = [];
   const ceilPads = [];
   let x = 700;
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 32; i++) {
     floorPads.push(x);
     x += 360 + (i % 3) * 20;
     if (i % 2 === 0) {
@@ -367,6 +367,8 @@ function buildBall(objects) {
   addBlock(objects, 2500, G - S * 3.4, S * 1.4, S);
   addBlock(objects, 4200, G - S * 3.6, S * 1.2, S);
   addBlock(objects, 6100, G - S * 3.2, S * 1.4, S);
+  addBlock(objects, 8800, G - S * 3.5, S * 1.3, S);
+  addBlock(objects, 11000, G - S * 3.3, S * 1.4, S);
   return end;
 }
 
@@ -399,7 +401,7 @@ function buildUfo(objects) {
 /** 7 — Wave zigzag tunnel (~35s) */
 function buildWave(objects) {
   let x = 800;
-  for (let i = 0; i < 28; i++) {
+  for (let i = 0; i < 48; i++) {
     const top = i % 2 === 0;
     const h = 140 + (i % 4) * 22;
     if (top) addBlock(objects, x, C, S + 8, h);
@@ -414,7 +416,7 @@ function buildWave(objects) {
 /** 8 — Gravity flip cube (~38s) */
 function buildMirror(objects) {
   let x = 900;
-  for (let cycle = 0; cycle < 4; cycle++) {
+  for (let cycle = 0; cycle < 7; cycle++) {
     addSpike(objects, x);
     addSpike(objects, x + 180);
     x += 400;
