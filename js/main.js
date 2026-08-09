@@ -38,6 +38,10 @@ const game = new Game(els.canvas, {
     els.btnNext.classList.toggle("hidden", !data.hasNext);
     els.btnNext.dataset.nextWorld = String(data.nextWorld ?? data.worldId);
     els.btnNext.dataset.nextStage = String(data.nextStage ?? 0);
+    const sameWorld = (data.nextWorld ?? data.worldId) === data.worldId;
+    els.btnNext.textContent = sameWorld
+      ? `Stage ${STAGE_LABELS[data.nextStage] || "II"}`
+      : "Mondo successivo";
     showOverlay("complete");
     els.hud.classList.add("hidden");
     renderWorldGrid();

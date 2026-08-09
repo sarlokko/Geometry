@@ -227,6 +227,24 @@ function densifyHazards(objects, stage) {
       }
     }
   }
+
+  // Ship / wave / mix: squeeze corridors a bit on higher stages
+  if (stage >= 1) {
+    const blocks = objects.filter((o) => o.type === "block");
+    for (let i = 0; i < blocks.length; i++) {
+      const o = blocks[i];
+      // Tall thin pillars → grow slightly toward the play tunnel
+      if (o.w <= S + 12 && o.h >= 100) {
+        if (o.y <= C + 20) o.h = Math.min(o.h + 18 * stage, G - C - 90);
+        else if (o.y + o.h >= G - 20) {
+          const grow = 16 * stage;
+          o.y -= grow;
+          o.h += grow;
+        }
+      }
+    }
+  }
+
   objects.push(...extras);
 }
 
