@@ -63,9 +63,9 @@ export const WORLDS = [
     id: 5,
     name: "Neverland",
     subtitle: "Pallina",
-    quirk: "Rimbalza sui pad: se tocchi terra sei fuori.",
+    quirk: "Rimbalza sui pad (tap in caduta per un micro-boost). Terra = fuori.",
     bpm: 142,
-    speed: 450,
+    speed: 400,
     startMode: "ball",
     lethalGround: true,
     colors: theme("#1a1008", "#3a2810", "#ffb347", "#5a3a18", "#ffd08a"),
@@ -407,30 +407,40 @@ function buildShip(objects) {
 
 /** 5 — Pallina: mixed bounce routes */
 function buildBall(objects) {
-  const floorPads = [
-    720, 1100, 1550, 2100, 2480, 3000, 3450, 4000, 4550, 5100, 5600, 6200, 6800, 7400, 8000, 8600, 9200, 9800,
-    10450, 11100, 11800,
-  ];
-  // Uneven ceiling pads — not every other floor pad
-  const ceilPads = [1350, 2750, 3750, 4850, 5900, 7100, 8300, 9000, 10750, 11450];
-  const dodgeBlocks = [
-    [1800, G - S * 3.5, S * 1.2],
-    [3300, G - S * 3.2, S * 1.5],
-    [5300, G - S * 3.8, S],
-    [6500, G - S * 3.1, S * 1.4],
-    [7800, G - S * 3.6, S * 1.2],
-    [9400, G - S * 3.3, S * 1.3],
-    [10900, G - S * 3.7, S],
-  ];
-
-  const end = 12300;
-  for (let sx = 600; sx < end; sx += 70) {
-    const onPad = floorPads.some((px) => sx > px - 30 && sx < px + S + 40);
-    if (!onPad) addSpike(objects, sx);
+  // Single floor-bounce chain. Hang ≈ 0.85s × 400 ≈ 340px; gap 335 matches travel.
+  const gap = 335;
+  const padW = 150;
+  const introPad = { x: 500, w: 180 };
+  const count = 30;
+  let x = 1000;
+  const floorPads = [];
+  for (let i = 0; i < count; i++) {
+    const w = i % 7 === 3 ? 190 : padW; // occasional wider safe pad
+    floorPads.push({ x, w });
+    x += gap;
   }
-  for (const px of floorPads) addPad(objects, px);
-  for (const px of ceilPads) addCeilingPad(objects, px);
-  for (const [bx, by, bw] of dodgeBlocks) addBlock(objects, bx, by, bw, S);
+  // Long outro strip — finish is while airborne after this bounce
+  floorPads.push({ x, w: 280 });
+  const end = x + 220;
+
+  const covers = [
+    [introPad.x - 40, introPad.x + introPad.w + 40],
+    ...floorPads.map((p) => [p.x - 50, p.x + p.w + 40]),
+  ];
+  for (let sx = 420; sx < end; sx += 56) {
+    if (!covers.some(([a, b]) => sx > a && sx < b)) addSpike(objects, sx);
+  }
+
+  objects.push({ type: "pad", x: introPad.x, y: G - 12, w: introPad.w, h: 14, dir: 1 });
+  for (const p of floorPads) {
+    objects.push({ type: "pad", x: p.x, y: G - 12, w: p.w, h: 14, dir: 1 });
+  }
+
+  // Decor only — above the bounce apex so they never clip the ball
+  addBlock(objects, 2800, 90, S * 2, S);
+  addBlock(objects, 5200, 100, S * 2.5, S);
+  addBlock(objects, 7600, 85, S * 2, S);
+
   return end;
 }
 
