@@ -1,6 +1,6 @@
-import { CONFIG } from "./config.js?v=20260809e";
-import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809e";
-import { AudioBus } from "./audio.js?v=20260809e";
+import { CONFIG } from "./config.js?v=20260809f";
+import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809f";
+import { AudioBus } from "./audio.js?v=20260809f";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_BEST_PREFIX = "neon-dash-best-w";
@@ -661,30 +661,45 @@ export class Game {
     p.onGround = false;
     if (mode === "ball") {
       const size = CONFIG.BALL_SIZE;
-      const cy = p.y + p.h / 2;
       p.w = size;
       p.h = size;
-      p.y = cy - size / 2;
       p.ballKind = ballKind || this.level?.world?.ballKind || "pads";
       p.gravityDir = 1;
       if (p.ballKind === "walls") {
-        p.vy = Math.min(p.vy, 0);
-      } else if (p.vy > -200) {
+        // Land safely on the floor — wall-ball uses gravity flips, not lethal ground
+        p.y = clamp(p.y, CONFIG.CEILING_Y + 8, CONFIG.GROUND_Y - size);
+        if (p.y + size >= CONFIG.GROUND_Y - 2) {
+          p.y = CONFIG.GROUND_Y - size;
+          p.onGround = true;
+          p.vy = 0;
+        } else {
+          p.vy = Math.min(p.vy, 0);
+        }
+      } else {
+        // Yellow-orb ball: lift off lethal ground into a clean bounce arc
+        // (fixes instant death when entering the portal while standing)
+        p.y = CONFIG.GROUND_Y - 170;
         p.vy = CONFIG.BALL_BOUNCE;
+        this._padLock = 0.08;
       }
     } else if (mode === "cube") {
       const scale = this.level.world.sizeScale || 1;
       const size = Math.round(CONFIG.PLAYER_SIZE * scale);
-      const cy = p.y + p.h / 2;
+      const cy = clamp(p.y + p.h / 2, CONFIG.CEILING_Y + size / 2, CONFIG.GROUND_Y - size / 2);
       p.w = size;
       p.h = size;
       p.y = cy - size / 2;
       p.sizeScale = scale;
       p.ballKind = null;
       p.gravityDir = 1;
+      if (p.y + size >= CONFIG.GROUND_Y - 2) {
+        p.y = CONFIG.GROUND_Y - size;
+        p.onGround = true;
+        p.vy = 0;
+      }
     } else {
       const size = CONFIG.PLAYER_SIZE;
-      const cy = p.y + p.h / 2;
+      const cy = clamp(p.y + p.h / 2, CONFIG.CEILING_Y + size / 2, CONFIG.GROUND_Y - size / 2);
       p.w = size;
       p.h = size;
       p.y = cy - size / 2;

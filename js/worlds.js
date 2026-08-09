@@ -1,4 +1,4 @@
-import { CONFIG } from "./config.js?v=20260809e";
+import { CONFIG } from "./config.js?v=20260809f";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
@@ -513,47 +513,67 @@ function buildMixRift(objects) {
 
 /** 8 — Wall ball + yellow orbs + cube */
 function buildMixBounce(objects) {
-  // Wall-ball opener
-  addSpike(objects, 900);
-  addSpike(objects, 1150);
-  for (let sx = 1500; sx < 2300; sx += 70) addSpike(objects, sx);
-  addBlock(objects, 2400, C, S * 3, S);
-  addSpikeCeil(objects, 2400 + S * 3 + 50);
-  for (let sx = 2800; sx < 3500; sx += 70) addSpikeCeil(objects, sx);
-  addSpike(objects, 3700);
-  addBlock(objects, 4000, G - S, S * 2, S);
+  // Wall-ball opener — dense flips early (was too sparse/easy)
+  addSpike(objects, 700);
+  addSpike(objects, 820);
+  addSpike(objects, 940);
+  for (let sx = 1100; sx < 1900; sx += 58) addSpike(objects, sx);
+  addBlock(objects, 1980, C, S * 2, S);
+  addSpikeCeil(objects, 1980 + S * 2 + 40);
+  addSpikeCeil(objects, 2200);
+  addSpikeCeil(objects, 2350);
+  for (let sx = 2500; sx < 3300; sx += 58) addSpikeCeil(objects, sx);
+  addSpike(objects, 3500);
+  addSpike(objects, 3650);
+  addBlock(objects, 3850, G - S * 2, S * 2, S);
+  addSpike(objects, 3850 + S * 2 + 50);
+  for (let sx = 4200; sx < 5000; sx += 58) addSpike(objects, sx);
+  addBlock(objects, 5100, C, S * 3, S);
+  addSpikeCeil(objects, 5100 + S * 3 + 40);
+  for (let sx = 5400; sx < 6100; sx += 58) addSpikeCeil(objects, sx);
+  addSpike(objects, 6300);
+  addBlock(objects, 6500, G - S, S * 2, S);
 
-  // Switch to yellow orbs — must catch them
-  addPortal(objects, 4500, "ball", "pads");
-  const gap = 335;
-  // Give a short airborne settle after the portal before the first orb
-  let x = 5050;
+  // Switch to yellow orbs — launch arc must hit the first orb (~speed*0.96)
+  const portalX = 7000;
+  addPortal(objects, portalX, "ball", "pads");
+  const speed = 430;
+  const gap = Math.round(speed * 0.84); // ~361 at this world's speed
+  let x = portalX + Math.round(speed * 0.96);
   const orbs = [];
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 14; i++) {
     orbs.push(x);
     x += gap;
   }
-  const covers = orbs.map((ox) => [ox - 50, ox + 70]);
-  for (let sx = 4600; sx < x; sx += 52) {
+  const covers = orbs.map((ox) => [ox - 48, ox + 68]);
+  // Spikes right after the portal — no safe floor walk
+  for (let sx = portalX + 50; sx < x; sx += 48) {
     if (!covers.some(([a, b]) => sx > a && sx < b)) addSpike(objects, sx);
   }
   for (const ox of orbs) addOrb(objects, ox, G - 44, 44);
 
-  addPortal(objects, x + 100, "cube");
-  addSpike(objects, x + 450);
-  addSpike(objects, x + 700);
-  addBlock(objects, x + 1000, G - S, S * 3, S);
-  addSpike(objects, x + 1000 + S * 3 + 70);
+  addPortal(objects, x + 80, "cube");
+  addSpike(objects, x + 380);
+  addSpike(objects, x + 520);
+  addSpike(objects, x + 680);
+  addBlock(objects, x + 900, G - S, S * 2, S);
+  addSpike(objects, x + 900 + S * 2 + 60);
+  addBlock(objects, x + 1200, G - S, S * 2, S);
+  addBlock(objects, x + 1200 + S * 2, G - S * 2, S * 2, S);
 
-  addPortal(objects, x + 1600, "ball", "walls");
-  for (let sx = x + 1900; sx < x + 2800; sx += 70) addSpike(objects, sx);
-  addBlock(objects, x + 2900, C, S * 4, S);
-  addSpikeCeil(objects, x + 2900 + S * 4 + 50);
+  addPortal(objects, x + 1700, "ball", "walls");
+  for (let sx = x + 1950; sx < x + 2750; sx += 58) addSpike(objects, sx);
+  addBlock(objects, x + 2850, C, S * 3, S);
+  addSpikeCeil(objects, x + 2850 + S * 3 + 40);
+  for (let sx = x + 3100; sx < x + 3800; sx += 58) addSpikeCeil(objects, sx);
+  addSpike(objects, x + 4000);
+  addSpike(objects, x + 4180);
 
-  addPortal(objects, x + 3500, "cube");
-  addSpike(objects, x + 3850);
-  addBlock(objects, x + 4200, G - S, S * 6, S);
-  return x + 4800;
+  addPortal(objects, x + 4400, "cube");
+  addSpike(objects, x + 4700);
+  addSpike(objects, x + 4900);
+  addBlock(objects, x + 5200, G - S, S * 5, S);
+  return x + 5800;
 }
 
 /** 9 — Tutti i poteri */
