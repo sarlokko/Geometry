@@ -397,16 +397,22 @@ function buildShip(objects) {
   addBlock(objects, 9400, 100, S, 140);
   addBlock(objects, 9750, G - 170, S, 170);
   addBlock(objects, 10150, 80, S, 150);
-  return 10600;
+  // I: last surprise — low floor then tall ceiling
+  addBlock(objects, 10600, G - 100, S * 2, 100);
+  addBlock(objects, 11000, 70, S, 210);
+  addBlock(objects, 11350, G - 155, S, 155);
+  addBlock(objects, 11700, 95, S, 145);
+  return 12100;
 }
 
 /** 5 — Pallina: mixed bounce routes */
 function buildBall(objects) {
   const floorPads = [
     720, 1100, 1550, 2100, 2480, 3000, 3450, 4000, 4550, 5100, 5600, 6200, 6800, 7400, 8000, 8600, 9200, 9800,
+    10450, 11100, 11800,
   ];
   // Uneven ceiling pads — not every other floor pad
-  const ceilPads = [1350, 2750, 3750, 4850, 5900, 7100, 8300, 9000];
+  const ceilPads = [1350, 2750, 3750, 4850, 5900, 7100, 8300, 9000, 10750, 11450];
   const dodgeBlocks = [
     [1800, G - S * 3.5, S * 1.2],
     [3300, G - S * 3.2, S * 1.5],
@@ -414,9 +420,10 @@ function buildBall(objects) {
     [6500, G - S * 3.1, S * 1.4],
     [7800, G - S * 3.6, S * 1.2],
     [9400, G - S * 3.3, S * 1.3],
+    [10900, G - S * 3.7, S],
   ];
 
-  const end = 10200;
+  const end = 12300;
   for (let sx = 600; sx < end; sx += 70) {
     const onPad = floorPads.some((px) => sx > px - 30 && sx < px + S + 40);
     if (!onPad) addSpike(objects, sx);
@@ -466,7 +473,14 @@ function buildUfo(objects) {
   addSpike(objects, 9200);
   addSpike(objects, 9400);
   addBlock(objects, 9750, G - S * 2, S * 4, S);
-  return 10400;
+  // J: last altitude switch — low spikes then tall mid shelf
+  addSpike(objects, 10350);
+  addSpike(objects, 10550);
+  addBlock(objects, 10900, 140, S * 3, S);
+  addSpike(objects, 11400);
+  addBlock(objects, 11750, G - S * 3, S * 2, S);
+  addBlock(objects, 12200, 80, S * 5, 110);
+  return 12800;
 }
 
 /** 7 — Onda: changing tunnel shapes */
@@ -535,7 +549,14 @@ function buildWave(objects) {
   addBlock(objects, x + 780, G - 140, S + 8, 140);
   addBlock(objects, x + 1050, C, S, 160);
   addBlock(objects, x + 1050, G - 120, S, 120);
-  return 10000;
+  x = 10000;
+  // L: slow open then brutal close
+  addBlock(objects, x, G - 80, S, 80);
+  addBlock(objects, x + 350, C, S + 12, 230);
+  addBlock(objects, x + 650, G - 190, S + 12, 190);
+  addBlock(objects, x + 950, C, S, 120);
+  addBlock(objects, x + 950, G - 150, S, 150);
+  return 11400;
 }
 
 /** 8 — Gravità: each flip section tells a different joke */
@@ -572,13 +593,20 @@ function buildMirror(objects) {
   addSpikeCeil(objects, 8300 + S * 6 + 80);
   addSpikeCeil(objects, 9000);
   addPortal(objects, 9400, "flip");
-  // G: normal finale
+  // G: normal — platform hop
   addSpike(objects, 9800);
   addSpike(objects, 10000);
   addBlock(objects, 10350, G - S, S * 2, S);
   addSpike(objects, 10350 + S * 2 + 70);
-  addBlock(objects, 10900, G - S, S * 5, S);
-  return 11400;
+  addPortal(objects, 10900, "flip");
+  // H: inverted short burst then back
+  addSpikeCeil(objects, 11300);
+  addBlock(objects, 11650, C, S * 3, S);
+  addSpikeCeil(objects, 11650 + S * 3 + 60);
+  addPortal(objects, 12200, "flip");
+  addSpike(objects, 12600);
+  addBlock(objects, 12950, G - S, S * 5, S);
+  return 13500;
 }
 
 /** 9 — Roulette: each mode segment is a short unique scene */
