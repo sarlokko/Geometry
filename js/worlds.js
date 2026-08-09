@@ -257,7 +257,7 @@ function buildPads(objects) {
   let x = 900;
   addSpike(objects, x);
   x += 250;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     addPad(objects, x);
     x += 320;
     if (i % 2 === 0) {
@@ -375,7 +375,7 @@ function buildBall(objects) {
 /** 6 — UFO flaps (~35s) */
 function buildUfo(objects) {
   let x = 900;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 8; i++) {
     addSpike(objects, x);
     addSpike(objects, x + 180);
     x += 400;
