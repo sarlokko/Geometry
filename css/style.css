@@ -197,7 +197,7 @@ body {
   color: var(--ink);
   cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
-  min-height: 108px;
+  min-height: 128px;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -272,6 +272,63 @@ body {
   margin-left: auto;
   font-family: var(--font-display);
   color: var(--ink);
+}
+
+.stage-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+}
+
+.stage-btn {
+  appearance: none;
+  border: 1px solid rgba(232, 244, 255, 0.14);
+  border-radius: 0.28rem;
+  padding: 0.28rem 0.2rem;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.05rem;
+  font-family: var(--font-display);
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.stage-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--world-accent, var(--accent)) 70%, white);
+  transform: translateY(-1px);
+}
+
+.stage-btn.selected {
+  border-color: var(--world-accent, var(--accent));
+  background: color-mix(in srgb, var(--world-accent, var(--accent)) 22%, rgba(0, 0, 0, 0.35));
+}
+
+.stage-btn.locked,
+.stage-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+.stage-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.stage-stars {
+  font-size: 0.55rem;
+  color: var(--accent-2);
+  letter-spacing: 0;
+}
+
+.stage-best {
+  font-size: 0.55rem;
+  color: var(--muted);
 }
 
 .brand {

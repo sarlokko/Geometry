@@ -16,29 +16,32 @@ Apri `http://localhost:8080` nel browser.
 | --- | --- |
 | Spazio / Click / Tocco | Salta / thrust / flip / zigzag (dipende dal mondo) |
 | Frecce | Seleziona mondo (menu) |
+| 1 / 2 / 3 | Seleziona stage I / II / III (menu) |
 | Esc | Pausa |
 
-### Mondi
+### Mondi e stage
 
-**6 livelli single-power**
+Ci sono **10 mondi**, ognuno con **3 stage** (I · II · III) a difficoltà crescente (più velocità, più ostacoli, ritmi più stretti).
 
-1. **Cubo Base** — salti classici  
-2. **Astronave** — hold per salire  
-3. **Sottosopra** — portali che invertano la gravità  
-4. **Zigzag** — onda (hold = su, rilascia = giù)  
-5. **Muri** — pallina: tap per rimbalzare tra suolo e soffitto  
-6. **Pallini** — pallina gialla: devi prendere i pallini gialli per avanzare  
+**6 mondi single-power**
 
-**4 livelli multi-power**
+1. Cubo Base  
+2. Astronave  
+3. Sottosopra  
+4. Zigzag  
+5. Muri  
+6. Pallini  
 
-7. **Doppio Varco** — cubo · nave · flip  
-8. **Rift Mix** — nave · zigzag · cubo  
-9. **Rimbalzi** — muri · pallini · cubo  
-10. **Neon Apex** — tutti i poteri  
+**4 mondi multi-power**
 
-Completare un mondo sblocca il successivo. Progresso e sblocco restano in `localStorage`.
+7. Doppio Varco  
+8. Rift Mix  
+9. Rimbalzi  
+10. Neon Apex  
 
-Musica procedurale Web Audio sincronizzata al BPM del mondo.
+Completare uno stage sblocca il successivo dello stesso mondo; completare lo stage III sblocca il mondo seguente.
+
+Dev: `?unlock=9` sblocca tutti i mondi e tutti gli stage.
 
 ## Struttura
 
@@ -48,10 +51,10 @@ Musica procedurale Web Audio sincronizzata al BPM del mondo.
   favicon.svg
   css/style.css
   js/
-    main.js      # UI, selezione mondi, input
-    game.js      # loop, fisiche per modalità, collisioni, render
-    worlds.js    # 10 mondi + layout + peculiarità
-    level.js     # re-export mondi
-    config.js    # costanti
-    audio.js     # SFX + musica ritmica (Web Audio)
+    main.js      # UI, selezione mondi/stage, input
+    game.js      # loop, fisiche, collisioni, render
+    worlds.js    # 10 mondi × 3 stage + layout
+    level.js     # re-export
+    config.js
+    audio.js
 ```

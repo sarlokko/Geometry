@@ -1,8 +1,15 @@
-import { CONFIG } from "./config.js?v=20260809i";
-import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809i";
-import { AudioBus } from "./audio.js?v=20260809i";
+import { CONFIG } from "./config.js?v=20260809j";
+import {
+  WORLDS,
+  createWorldLevel,
+  clampWorld,
+  clampStage,
+  STAGE_COUNT,
+} from "./worlds.js?v=20260809j";
+import { AudioBus } from "./audio.js?v=20260809j";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
+const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
 const STORAGE_BEST_PREFIX = "neon-dash-best-w";
 
 const FLY_MODES = new Set(["ship", "ufo", "wave", "ball"]);
@@ -20,6 +27,7 @@ export class Game {
 
     this.state = "menu";
     this.worldId = 0;
+    this.stage = 0;
     this.attempt = 0;
     this.unlocked = Number(localStorage.getItem(STORAGE_UNLOCK) || 0);
     if (!Number.isFinite(this.unlocked)) this.unlocked = 0;
@@ -36,8 +44,8 @@ export class Game {
     this._padLock = 0;
 
     this.colors = { ...WORLDS[0].colors };
-    this.level = createWorldLevel(0);
-    this.best = this.loadBest(0);
+    this.level = createWorldLevel(0, 0);
+    this.best = this.loadBest(0, 0);
     this.resetPlayer(true);
 
     this._last = 0;
@@ -51,21 +59,54 @@ export class Game {
     this.resize();
   }
 
-  loadBest(worldId) {
-    return Number(localStorage.getItem(STORAGE_BEST_PREFIX + worldId) || 0);
+  storageBestKey(worldId, stage) {
+    return `${STORAGE_BEST_PREFIX}${worldId}-s${stage}`;
   }
 
-  saveBest(worldId, value) {
-    localStorage.setItem(STORAGE_BEST_PREFIX + worldId, String(value));
+  loadBest(worldId, stage = 0) {
+    const key = this.storageBestKey(worldId, stage);
+    const v = Number(localStorage.getItem(key) || 0);
+    if (v) return v;
+    // Migrate legacy single-best keys onto stage I
+    if (stage === 0) {
+      const legacy = Number(localStorage.getItem(STORAGE_BEST_PREFIX + worldId) || 0);
+      return legacy || 0;
+    }
+    return 0;
+  }
+
+  saveBest(worldId, stage, value) {
+    localStorage.setItem(this.storageBestKey(worldId, stage), String(value));
   }
 
   getUnlocked() {
     return this.unlocked;
   }
 
+  /** Highest playable stage index for a world (0–2), or -1 if world locked. */
+  getStageUnlocked(worldId) {
+    worldId = clampWorld(worldId);
+    if (worldId > this.unlocked) return -1;
+    const raw = Number(localStorage.getItem(STORAGE_STAGE_PREFIX + worldId) || 0);
+    return clampStage(Number.isFinite(raw) ? raw : 0);
+  }
+
+  setStageUnlocked(worldId, stage) {
+    worldId = clampWorld(worldId);
+    stage = clampStage(stage);
+    const cur = this.getStageUnlocked(worldId);
+    if (stage > cur) {
+      localStorage.setItem(STORAGE_STAGE_PREFIX + worldId, String(stage));
+    }
+  }
+
   setUnlocked(worldId) {
     this.unlocked = clampWorld(worldId);
     localStorage.setItem(STORAGE_UNLOCK, String(this.unlocked));
+    // Dev unlock: open all stages on unlocked worlds
+    for (let i = 0; i <= this.unlocked; i++) {
+      localStorage.setItem(STORAGE_STAGE_PREFIX + i, String(STAGE_COUNT - 1));
+    }
   }
 
   getWorldMeta(worldId = this.worldId) {
@@ -88,20 +129,22 @@ export class Game {
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
-  /** @param {number} worldId */
-  start(worldId = this.worldId) {
+  /** @param {number} worldId @param {number} [stage] */
+  start(worldId = this.worldId, stage = this.stage) {
     this.worldId = clampWorld(worldId);
     if (this.worldId > this.unlocked) this.worldId = this.unlocked;
+    this.stage = clampStage(stage);
+    const maxStage = Math.max(0, this.getStageUnlocked(this.worldId));
+    if (this.stage > maxStage) this.stage = maxStage;
 
     // Fresh counter for every run / every level
     this.attempt = 1;
-    this.level = createWorldLevel(this.worldId);
+    this.level = createWorldLevel(this.worldId, this.stage);
     this.colors = { ...this.level.world.colors };
-    this.best = this.loadBest(this.worldId);
+    this.best = this.loadBest(this.worldId, this.stage);
     this.resetPlayer(false);
     this.state = "playing";
     this.audio.ensure();
-    // Restart bed every run so groove starts on beat 1 with this world's BPM
     this.audio.setTrack({
       bpm: this.level.world.bpm,
       worldId: this.worldId,
@@ -145,11 +188,9 @@ export class Game {
       y = CONFIG.GROUND_Y * 0.45;
     } else if (mode === "ball") {
       if (world.ballKind === "walls") {
-        // Wall-bounce ball starts on the floor; tap flips gravity
         y = CONFIG.GROUND_Y - size;
         vy = 0;
       } else {
-        // Yellow-orb ball starts mid-arc toward the first orb
         y = CONFIG.GROUND_Y - 160;
         vy = CONFIG.BALL_BOUNCE;
       }
@@ -193,7 +234,8 @@ export class Game {
       progress: Math.floor(this.progress * 100),
       best: Math.floor(this.best * 100),
       worldId: this.worldId,
-      worldName: world.name,
+      stage: this.stage,
+      worldName: world.displayName || world.name,
       quirk: world.quirk,
       mode: this.player?.mode,
       bpm: world.bpm,
@@ -230,7 +272,6 @@ export class Game {
     if (p.mode === "ball") {
       const kind = p.ballKind || this.level?.world?.ballKind || "pads";
       if (kind === "walls") {
-        // Rimbalzo sui muri: tap flips gravity between floor and ceiling
         if (!this._ballTapLock || this._ballTapLock <= 0) {
           p.gravityDir *= -1;
           p.onGround = false;
@@ -243,11 +284,9 @@ export class Game {
         }
         return false;
       }
-      // Yellow-orb ball: tap while falling near an orb (one tap per orb)
       const orb = this.findTouching("orb");
       if (orb && p.vy > -80) {
         const dir = orb.dir || 1;
-        // Reset to a consistent bounce arc so spacing stays readable
         p.y = CONFIG.GROUND_Y - 160;
         p.vy = CONFIG.BALL_BOUNCE * dir;
         p.onGround = false;
@@ -298,7 +337,6 @@ export class Game {
         this.player?.mode === "ball" &&
         this.player?.ballKind !== "walls"
       ) {
-        // Tall catch column: tap when above the yellow orb, not only on contact
         const column = {
           x: o.x - 14,
           y: o.y - 130,
@@ -362,7 +400,6 @@ export class Game {
 
     this.resolveBounds(world, dt);
 
-    // Rotation / tilt
     if (p.mode === "cube" && !p.onGround) {
       p.rotation += CONFIG.ROTATION_SPEED * dt * p.gravityDir;
     } else if (p.mode === "ship" || p.mode === "ufo") {
@@ -382,7 +419,6 @@ export class Game {
       }
     }
 
-    // Hold-to-hop: cube keeps jumping on every landing while input is held
     if (this.held && p.mode === "cube" && (p.onGround || this.coyote > 0)) {
       this.tryJump();
     }
@@ -392,7 +428,7 @@ export class Game {
     this.progress = clamp(p.worldX / this.level.length, 0, 1);
     if (this.progress > this.best) {
       this.best = this.progress;
-      this.saveBest(this.worldId, this.best);
+      this.saveBest(this.worldId, this.stage, this.best);
     }
     this.hooks.onHud?.(this.hudPayload());
 
@@ -436,7 +472,6 @@ export class Game {
       return;
     }
 
-    // cube + ball
     p.vy += CONFIG.GRAVITY * gDir * dt;
     if (gDir === 1 && p.vy > CONFIG.MAX_FALL) p.vy = CONFIG.MAX_FALL;
     if (gDir === -1 && p.vy < -CONFIG.MAX_FALL) p.vy = -CONFIG.MAX_FALL;
@@ -448,13 +483,11 @@ export class Game {
     const ballKind = p.ballKind || world.ballKind || "pads";
     const wallBall = p.mode === "ball" && ballKind === "walls";
     const padBall = p.mode === "ball" && ballKind !== "walls";
-    const lethalFloor =
-      world.lethalGround || padBall || p.mode === "wave";
+    const lethalFloor = world.lethalGround || padBall || p.mode === "wave";
     const lethalCeil = world.lethalCeiling || p.mode === "wave";
 
     p.onGround = false;
 
-    // Floor
     if (p.y + p.h >= CONFIG.GROUND_Y) {
       if (lethalFloor || (gDir === -1 && FLY_MODES.has(p.mode) && !wallBall)) {
         p.y = CONFIG.GROUND_Y - p.h;
@@ -473,7 +506,6 @@ export class Game {
           p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
         }
       } else if (gDir === -1 && (p.mode === "cube" || wallBall)) {
-        // Inverted: floor acts as ceiling clamp
         p.y = CONFIG.GROUND_Y - p.h;
         if (p.vy > 0) p.vy = 0;
       } else {
@@ -485,7 +517,6 @@ export class Game {
       this.coyote = Math.max(0, this.coyote - dt);
     }
 
-    // Ceiling
     if (p.y <= CONFIG.CEILING_Y) {
       if (lethalCeil) {
         p.y = CONFIG.CEILING_Y;
@@ -501,7 +532,6 @@ export class Game {
           p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
         }
       } else if (padBall) {
-        // Soft ceiling clamp — yellow orbs reverse the bounce
         p.y = CONFIG.CEILING_Y;
         if (p.vy < 0) p.vy *= -0.25;
       } else {
@@ -533,7 +563,6 @@ export class Game {
         const blockBox = { x: box.x + 4, y: box.y, w: box.w - 8, h: box.h };
         if (!aabb(blockBox, o)) continue;
 
-        // Wall-ball lands on blocks; yellow-orb ball dies on solid geometry
         if (p.mode === "ball") {
           const kind = p.ballKind || this.level?.world?.ballKind || "pads";
           if (kind === "walls") {
@@ -572,17 +601,11 @@ export class Game {
           return;
         }
 
-        if (p.mode === "wave") {
+        if (p.mode === "wave" || p.mode === "ship" || p.mode === "ufo") {
           this.die();
           return;
         }
 
-        if (p.mode === "ship" || p.mode === "ufo") {
-          this.die();
-          return;
-        }
-
-        // cube landing relative to gravity
         if (gDir === 1) {
           const fromTop = this._prevWorldY + p.h <= o.y + 16 && p.vy >= -60;
           if (fromTop) {
@@ -592,7 +615,8 @@ export class Game {
             this.coyote = CONFIG.COYOTE_TIME;
             p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
           } else {
-            const overlapX = Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
+            const overlapX =
+              Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
             if (overlapX > 12) {
               this.die();
               return;
@@ -607,7 +631,8 @@ export class Game {
             this.coyote = CONFIG.COYOTE_TIME;
             p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
           } else {
-            const overlapX = Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
+            const overlapX =
+              Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
             if (overlapX > 12) {
               this.die();
               return;
@@ -617,8 +642,7 @@ export class Game {
       }
 
       if (o.type === "pad" && this._padLock <= 0) {
-        const padHit = o;
-        if (aabb(box, padHit)) {
+        if (aabb(box, o)) {
           const dir = o.dir || 1;
           const approaching = dir === 1 ? p.vy >= -20 : p.vy <= 20;
           if (approaching && p.mode === "cube") {
@@ -679,7 +703,6 @@ export class Game {
       p.ballKind = ballKind || this.level?.world?.ballKind || "pads";
       p.gravityDir = 1;
       if (p.ballKind === "walls") {
-        // Land safely on the floor — wall-ball uses gravity flips, not lethal ground
         p.y = clamp(p.y, CONFIG.CEILING_Y + 8, CONFIG.GROUND_Y - size);
         if (p.y + size >= CONFIG.GROUND_Y - 2) {
           p.y = CONFIG.GROUND_Y - size;
@@ -689,8 +712,6 @@ export class Game {
           p.vy = Math.min(p.vy, 0);
         }
       } else {
-        // Yellow-orb ball: lift off lethal ground into a clean bounce arc
-        // (fixes instant death when entering the portal while standing)
         p.y = CONFIG.GROUND_Y - 160;
         p.vy = CONFIG.BALL_BOUNCE;
         this._padLock = 0.08;
@@ -738,7 +759,7 @@ export class Game {
     setTimeout(() => {
       if (this.state !== "dead") return;
       this.attempt += 1;
-      this.level = createWorldLevel(this.worldId);
+      this.level = createWorldLevel(this.worldId, this.stage);
       this.colors = { ...this.level.world.colors };
       this.resetPlayer(false);
       this.state = "playing";
@@ -757,12 +778,29 @@ export class Game {
     this.state = "complete";
     this.progress = 1;
     this.best = 1;
-    this.saveBest(this.worldId, 1);
+    this.saveBest(this.worldId, this.stage, 1);
 
-    const nextUnlock = Math.min(WORLDS.length - 1, this.worldId + 1);
-    if (nextUnlock > this.unlocked) {
-      this.unlocked = nextUnlock;
-      localStorage.setItem(STORAGE_UNLOCK, String(this.unlocked));
+    let unlockNote = "";
+    let hasNext = false;
+    let nextWorld = this.worldId;
+    let nextStage = this.stage;
+
+    if (this.stage < STAGE_COUNT - 1) {
+      nextStage = this.stage + 1;
+      this.setStageUnlocked(this.worldId, nextStage);
+      hasNext = true;
+      unlockNote = ` Stage ${["I", "II", "III"][nextStage]} sbloccato.`;
+    } else {
+      const nextUnlock = Math.min(WORLDS.length - 1, this.worldId + 1);
+      if (nextUnlock > this.unlocked) {
+        this.unlocked = nextUnlock;
+        localStorage.setItem(STORAGE_UNLOCK, String(this.unlocked));
+        this.setStageUnlocked(nextUnlock, 0);
+        unlockNote = ` Mondo ${nextUnlock + 1} sbloccato.`;
+      }
+      hasNext = this.worldId < WORLDS.length - 1;
+      nextWorld = Math.min(WORLDS.length - 1, this.worldId + 1);
+      nextStage = 0;
     }
 
     this.audio.win();
@@ -772,9 +810,13 @@ export class Game {
       attempt: this.attempt,
       best: 100,
       worldId: this.worldId,
-      worldName: this.level.world.name,
+      stage: this.stage,
+      worldName: this.level.world.displayName || this.level.world.name,
       unlocked: this.unlocked,
-      hasNext: this.worldId < WORLDS.length - 1,
+      hasNext,
+      nextWorld,
+      nextStage,
+      unlockNote,
     });
     this.hooks.onHud?.(this.hudPayload());
   }
@@ -826,7 +868,6 @@ export class Game {
 
     this.drawParallax(ctx);
 
-    // Ground — danger tint when lethal (yellow-orb ball always)
     const dangerFloor =
       world.lethalGround ||
       (this.player?.mode === "ball" && this.player?.ballKind !== "walls");
@@ -849,45 +890,18 @@ export class Game {
       ctx.stroke();
     }
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y);
-    ctx.clip();
-    ctx.strokeStyle = hexAlpha(world.lethalGround ? C.spike : C.groundLine, 0.1);
-    ctx.lineWidth = 1;
-    const scroll = -((this.cameraX * 0.8) % 48);
-    for (let x = scroll; x < WIDTH + 48; x += 48) {
-      ctx.beginPath();
-      ctx.moveTo(x, GROUND_Y);
-      ctx.lineTo(x - 40, HEIGHT);
-      ctx.stroke();
-    }
-    ctx.restore();
-
     for (const o of this.level.objects) {
-      if (!nearCamera(o, this.cameraX, 80)) continue;
-      this.drawObject(ctx, o, o.x - this.cameraX);
+      if (!nearCamera(o, this.cameraX, 120)) continue;
+      const sx = o.x - this.cameraX;
+      this.drawObject(ctx, o, sx);
     }
 
-    for (const part of this.particles) {
-      ctx.globalAlpha = clamp(part.life / part.max, 0, 1);
-      ctx.fillStyle = part.color;
-      ctx.fillRect(part.x, part.y, part.size, part.size);
-    }
-    ctx.globalAlpha = 1;
-
-    if (this.player.alive || this.state === "dead") {
-      this.drawPlayer(ctx);
-    }
+    this.drawParticles(ctx);
+    this.drawPlayer(ctx);
 
     if (this._flash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${this._flash * 0.35})`;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    }
-
-    ctx.fillStyle = "rgba(0,0,0,0.05)";
-    for (let y = 0; y < HEIGHT; y += 4) {
-      ctx.fillRect(0, y, WIDTH, 1);
     }
 
     ctx.restore();
@@ -898,11 +912,11 @@ export class Game {
     const t = this._bgPulse;
     const C = this.colors;
     const layers = [
-      { speed: 0.15, alpha: 0.08, gap: 90 },
-      { speed: 0.35, alpha: 0.12, gap: 70 },
+      { parallax: 0.15, gap: 140, alpha: 0.05 },
+      { parallax: 0.35, gap: 90, alpha: 0.07 },
     ];
     for (const layer of layers) {
-      const off = -((this.cameraX * layer.speed) % layer.gap);
+      const off = -((this.cameraX * layer.parallax) % layer.gap);
       ctx.strokeStyle = hexAlpha(C.blockEdge, layer.alpha);
       ctx.lineWidth = 1;
       for (let x = off; x < WIDTH; x += layer.gap) {
@@ -938,35 +952,29 @@ export class Game {
       ctx.strokeStyle = C.blockEdge;
       ctx.lineWidth = 2;
       ctx.strokeRect(sx + 1, o.y + 1, o.w - 2, o.h - 2);
-      ctx.fillStyle = hexAlpha(C.blockEdge, 0.12);
-      ctx.fillRect(sx + 4, o.y + 4, o.w * 0.35, 6);
     } else if (o.type === "spike") {
       ctx.fillStyle = C.spike;
       ctx.beginPath();
-      if (o.dir === -1) {
-        ctx.moveTo(sx, o.y);
-        ctx.lineTo(sx + o.w / 2, o.y + o.h);
-        ctx.lineTo(sx + o.w, o.y);
-      } else {
+      if ((o.dir || 1) === 1) {
         ctx.moveTo(sx, o.y + o.h);
         ctx.lineTo(sx + o.w / 2, o.y);
         ctx.lineTo(sx + o.w, o.y + o.h);
+      } else {
+        ctx.moveTo(sx, o.y);
+        ctx.lineTo(sx + o.w / 2, o.y + o.h);
+        ctx.lineTo(sx + o.w, o.y);
       }
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.25)";
-      ctx.stroke();
     } else if (o.type === "pad") {
       ctx.fillStyle = C.pad;
       ctx.fillRect(sx, o.y, o.w, o.h);
-      ctx.fillStyle = "rgba(255,255,255,0.45)";
-      const ly = o.dir === -1 ? o.y + o.h - 5 : o.y + 2;
-      ctx.fillRect(sx + 4, ly, o.w - 8, 3);
+      ctx.fillStyle = "#fff6b0";
+      ctx.fillRect(sx + 2, o.y + 2, o.w - 4, 3);
     } else if (o.type === "orb") {
-      const pulse = 1 + Math.sin(performance.now() / 120) * 0.08;
-      const r = (o.w / 2) * pulse;
       const cx = sx + o.w / 2;
       const cy = o.y + o.h / 2;
+      const r = Math.min(o.w, o.h) / 2;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fillStyle = C.orb;
@@ -988,7 +996,6 @@ export class Game {
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
       ctx.strokeRect(sx, o.y, o.w, o.h);
-      // mode glyph centered on the full-height gate
       ctx.fillStyle = color;
       ctx.font = "bold 12px Orbitron, sans-serif";
       ctx.textAlign = "center";
@@ -1016,61 +1023,63 @@ export class Game {
     if (p.mode === "ship") {
       ctx.fillStyle = C.playerShip;
       ctx.beginPath();
-      ctx.moveTo(-p.w * 0.45, p.h * 0.35);
-      ctx.lineTo(p.w * 0.5, 0);
-      ctx.lineTo(-p.w * 0.45, -p.h * 0.35);
+      ctx.moveTo(p.w / 2, 0);
+      ctx.lineTo(-p.w / 2, -p.h / 2);
+      ctx.lineTo(-p.w / 3, 0);
+      ctx.lineTo(-p.w / 2, p.h / 2);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(-p.w * 0.2, -6, 12, 12);
     } else if (p.mode === "ball") {
       ctx.fillStyle = C.playerBall;
       ctx.beginPath();
       ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.5)";
-      ctx.lineWidth = 3;
-      ctx.stroke();
+      ctx.strokeStyle = "#fff6b0";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(p.w * 0.35, 0);
-      ctx.strokeStyle = "rgba(20,10,0,0.35)";
+      ctx.moveTo(-p.w / 3, 0);
+      ctx.lineTo(p.w / 3, 0);
       ctx.stroke();
     } else if (p.mode === "ufo") {
       ctx.fillStyle = C.playerUfo;
       ctx.beginPath();
-      ctx.ellipse(0, 0, p.w * 0.5, p.h * 0.28, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, p.w / 2, p.h / 3, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(0, -p.h * 0.12, p.w * 0.22, Math.PI, 0);
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.arc(0, -p.h / 6, p.w / 3, Math.PI, 0);
       ctx.fill();
     } else if (p.mode === "wave") {
       ctx.fillStyle = C.playerWave;
       ctx.beginPath();
-      ctx.moveTo(-p.w * 0.45, p.h * 0.35);
-      ctx.lineTo(p.w * 0.45, 0);
-      ctx.lineTo(-p.w * 0.45, -p.h * 0.35);
+      ctx.moveTo(-p.w / 2, p.h / 3);
+      ctx.lineTo(0, -p.h / 2);
+      ctx.lineTo(p.w / 2, p.h / 3);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.45)";
-      ctx.stroke();
     } else {
-      // cube (possibly mini / inverted)
       ctx.fillStyle = C.player;
       ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-      ctx.strokeStyle = "rgba(255,255,255,0.55)";
-      ctx.lineWidth = Math.max(2, 3 * (p.sizeScale || 1));
+      ctx.strokeStyle = "#ffffffaa";
+      ctx.lineWidth = 2;
       ctx.strokeRect(-p.w / 2 + 2, -p.h / 2 + 2, p.w - 4, p.h - 4);
-      ctx.fillStyle = "rgba(4,16,24,0.35)";
-      const eye = Math.max(4, 12 * (p.sizeScale || 1));
-      ctx.fillRect(-eye / 2, -eye / 2, eye, eye);
-      if (p.gravityDir === -1) {
-        ctx.strokeStyle = C.portalFlip;
-        ctx.strokeRect(-p.w / 2 - 2, -p.h / 2 - 2, p.w + 4, p.h + 4);
-      }
     }
+
+    if (p.gravityDir === -1 && p.mode === "cube") {
+      ctx.strokeStyle = C.portalFlip;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-p.w / 2 - 2, -p.h / 2 - 2, p.w + 4, p.h + 4);
+    }
+
     ctx.restore();
+  }
+
+  drawParticles(ctx) {
+    for (const part of this.particles) {
+      ctx.globalAlpha = clamp(part.life / part.max, 0, 1);
+      ctx.fillStyle = part.color;
+      ctx.fillRect(part.x, part.y, part.size, part.size);
+    }
+    ctx.globalAlpha = 1;
   }
 }
 
@@ -1079,7 +1088,7 @@ function modeColor(mode, C) {
   if (mode === "ball") return C.playerBall;
   if (mode === "ufo") return C.playerUfo;
   if (mode === "wave") return C.playerWave;
-  return C.particle;
+  return C.player;
 }
 
 function portalColor(mode, C) {
@@ -1105,23 +1114,23 @@ function aabb(a, b) {
 }
 
 function inflate(o, pad) {
-  return { x: o.x - pad, y: o.y - pad, w: o.w + pad * 2, h: o.h + pad * 2 };
+  return { x: o.x + pad, y: o.y + pad, w: o.w - pad * 2, h: o.h - pad * 2 };
 }
 
-function nearCamera(o, cameraX, margin = 40) {
-  const sx = o.x - cameraX;
-  return sx + (o.w || 40) > -margin && sx < CONFIG.WIDTH + margin;
+function nearCamera(o, cam, pad = 80) {
+  return o.x + (o.w || 40) > cam - pad && o.x < cam + CONFIG.WIDTH + pad;
 }
 
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
 
-function hexAlpha(hex, alpha) {
+function hexAlpha(hex, a) {
   const h = hex.replace("#", "");
-  if (h.length !== 6) return `rgba(126,231,255,${alpha})`;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
 }

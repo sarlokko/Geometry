@@ -1,5 +1,5 @@
-import { Game } from "./game.js?v=20260809i";
-import { WORLDS } from "./worlds.js?v=20260809i";
+import { Game } from "./game.js?v=20260809j";
+import { WORLDS, STAGE_COUNT, STAGE_LABELS } from "./worlds.js?v=20260809j";
 
 const els = {
   menu: document.getElementById("menu"),
@@ -20,6 +20,7 @@ const els = {
 };
 
 let selectedWorld = 0;
+let selectedStage = 0;
 
 const game = new Game(els.canvas, {
   onHud: (data) => {
@@ -31,14 +32,16 @@ const game = new Game(els.canvas, {
   },
   onPause: () => showOverlay("pause"),
   onComplete: (data) => {
-    const unlockedNote =
-      data.hasNext && data.unlocked >= data.worldId + 1
-        ? ` Mondo ${data.worldId + 2} sbloccato.`
-        : "";
     els.completeStats.textContent = `${data.worldName} completato in ${data.attempt} attempt${
       data.attempt === 1 ? "" : "s"
-    }.${unlockedNote}`;
+    }.${data.unlockNote || ""}`;
     els.btnNext.classList.toggle("hidden", !data.hasNext);
+    els.btnNext.dataset.nextWorld = String(data.nextWorld ?? data.worldId);
+    els.btnNext.dataset.nextStage = String(data.nextStage ?? 0);
+    const sameWorld = (data.nextWorld ?? data.worldId) === data.worldId;
+    els.btnNext.textContent = sameWorld
+      ? `Stage ${STAGE_LABELS[data.nextStage] || "II"}`
+      : "Mondo successivo";
     showOverlay("complete");
     els.hud.classList.add("hidden");
     renderWorldGrid();
@@ -57,12 +60,8 @@ function hideOverlays() {
   els.complete.classList.add("hidden");
 }
 
-function stars(n) {
-  return "★".repeat(n) + "☆".repeat(Math.max(0, 5 - n));
-}
-
-function difficultyStars(worldId) {
-  return Math.min(5, Math.ceil((worldId + 1) / 2));
+function stageStars(stage) {
+  return "★".repeat(stage + 1) + "☆".repeat(Math.max(0, 2 - stage));
 }
 
 function renderWorldGrid() {
@@ -71,52 +70,73 @@ function renderWorldGrid() {
 
   WORLDS.forEach((world, i) => {
     const locked = i > unlocked;
-    const best = Math.floor(game.loadBest(i) * 100);
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "world-card";
-    btn.role = "option";
-    btn.setAttribute("aria-selected", String(i === selectedWorld));
-    if (i === selectedWorld) btn.classList.add("selected");
-    if (locked) btn.classList.add("locked");
-    btn.disabled = locked;
+    const maxStage = game.getStageUnlocked(i);
+    const card = document.createElement("div");
+    card.className = "world-card";
+    card.role = "option";
+    card.setAttribute("aria-selected", String(i === selectedWorld));
+    if (i === selectedWorld) card.classList.add("selected");
+    if (locked) card.classList.add("locked");
 
     const accent = world.colors.player;
-    btn.style.setProperty("--world-accent", accent);
+    card.style.setProperty("--world-accent", accent);
 
-    btn.innerHTML = `
+    const stages = Array.from({ length: STAGE_COUNT }, (_, s) => {
+      const stageLocked = locked || s > maxStage;
+      const best = Math.floor(game.loadBest(i, s) * 100);
+      const sel = i === selectedWorld && s === selectedStage;
+      return `<button type="button" class="stage-btn${sel ? " selected" : ""}${
+        stageLocked ? " locked" : ""
+      }" data-world="${i}" data-stage="${s}" ${stageLocked ? "disabled" : ""} title="Stage ${
+        STAGE_LABELS[s]
+      }">
+        <span class="stage-label">${STAGE_LABELS[s]}</span>
+        <span class="stage-stars">${stageStars(s)}</span>
+        <span class="stage-best">${stageLocked ? "—" : best >= 100 ? "OK" : best + "%"}</span>
+      </button>`;
+    }).join("");
+
+    card.innerHTML = `
       <span class="world-index">${String(i + 1).padStart(2, "0")}</span>
       <span class="world-name">${world.name}</span>
       <span class="world-sub">${locked ? "Bloccato" : world.subtitle}</span>
-      <span class="world-meta">
-        <span class="world-stars" aria-label="Difficoltà ${difficultyStars(i)} su 5">${stars(
-          difficultyStars(i)
-        )}</span>
-        <span class="world-bpm">${world.bpm} BPM</span>
-        <span class="world-best">${locked ? "—" : best + "%"}</span>
-      </span>
+      <div class="stage-row" role="group" aria-label="Stage di ${world.name}">${stages}</div>
     `;
 
-    btn.addEventListener("click", () => {
-      if (locked) return;
-      selectedWorld = i;
-      play(i);
+    card.querySelectorAll(".stage-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (btn.disabled) return;
+        selectedWorld = Number(btn.dataset.world);
+        selectedStage = Number(btn.dataset.stage);
+        play(selectedWorld, selectedStage);
+      });
     });
 
-    els.worldGrid.appendChild(btn);
+    card.addEventListener("click", () => {
+      if (locked) return;
+      selectedWorld = i;
+      selectedStage = Math.min(selectedStage, Math.max(0, maxStage));
+      renderWorldGrid();
+      if (els.selectedQuirk) els.selectedQuirk.textContent = world.quirk;
+    });
+
+    els.worldGrid.appendChild(card);
   });
 
   const selected = WORLDS[selectedWorld];
   if (els.selectedQuirk && selected) {
-    els.selectedQuirk.textContent = selected.quirk;
+    const label = STAGE_LABELS[selectedStage] || "I";
+    els.selectedQuirk.textContent = `${selected.quirk} · Stage ${label}`;
   }
 }
 
-function play(worldId = selectedWorld) {
+function play(worldId = selectedWorld, stage = selectedStage) {
   selectedWorld = worldId;
+  selectedStage = stage;
   hideOverlays();
   els.hud.classList.remove("hidden");
-  game.start(worldId);
+  game.start(worldId, stage);
 }
 
 function syncMusicButton() {
@@ -133,29 +153,31 @@ els.btnMusic.addEventListener("click", (e) => {
   syncMusicButton();
 });
 
-document.getElementById("btn-play").addEventListener("click", () => play(selectedWorld));
+document.getElementById("btn-play").addEventListener("click", () => play(selectedWorld, selectedStage));
 document.getElementById("btn-resume").addEventListener("click", () => {
   hideOverlays();
   els.hud.classList.remove("hidden");
   game.resume();
 });
-document.getElementById("btn-restart").addEventListener("click", () => play(game.worldId));
+document.getElementById("btn-restart").addEventListener("click", () => play(game.worldId, game.stage));
 document.getElementById("btn-menu").addEventListener("click", () => {
   game.goMenu();
   els.hud.classList.add("hidden");
   renderWorldGrid();
   showOverlay("menu");
 });
-document.getElementById("btn-again").addEventListener("click", () => play(game.worldId));
+document.getElementById("btn-again").addEventListener("click", () => play(game.worldId, game.stage));
 document.getElementById("btn-complete-menu").addEventListener("click", () => {
   game.goMenu();
   renderWorldGrid();
   showOverlay("menu");
 });
 els.btnNext.addEventListener("click", () => {
-  const next = Math.min(WORLDS.length - 1, game.worldId + 1);
-  selectedWorld = next;
-  play(next);
+  const nw = Number(els.btnNext.dataset.nextWorld ?? game.worldId);
+  const ns = Number(els.btnNext.dataset.nextStage ?? 0);
+  selectedWorld = nw;
+  selectedStage = ns;
+  play(nw, ns);
 });
 
 function isTypingTarget(el) {
@@ -179,6 +201,7 @@ window.addEventListener("keydown", (e) => {
     if (e.code === "ArrowLeft" || e.code === "ArrowUp") {
       e.preventDefault();
       selectedWorld = Math.max(0, selectedWorld - 1);
+      selectedStage = Math.min(selectedStage, Math.max(0, game.getStageUnlocked(selectedWorld)));
       renderWorldGrid();
       return;
     }
@@ -186,7 +209,16 @@ window.addEventListener("keydown", (e) => {
       e.preventDefault();
       const max = game.getUnlocked();
       selectedWorld = Math.min(max, selectedWorld + 1);
+      selectedStage = Math.min(selectedStage, Math.max(0, game.getStageUnlocked(selectedWorld)));
       renderWorldGrid();
+      return;
+    }
+    if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3") {
+      const s = Number(e.code.replace("Digit", "")) - 1;
+      if (s <= game.getStageUnlocked(selectedWorld)) {
+        selectedStage = s;
+        renderWorldGrid();
+      }
       return;
     }
   }
@@ -194,11 +226,11 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
     e.preventDefault();
     if (game.state === "menu") {
-      play(selectedWorld);
+      play(selectedWorld, selectedStage);
       return;
     }
     if (game.state === "complete") {
-      play(game.worldId);
+      play(game.worldId, game.stage);
       return;
     }
     game.press();
@@ -234,7 +266,7 @@ els.canvas.addEventListener(
 );
 window.addEventListener("touchend", release);
 
-// Dev helper: ?unlock=9 unlocks all worlds for testing
+// Dev helper: ?unlock=9 unlocks all worlds + all stages
 const unlockParam = new URLSearchParams(location.search).get("unlock");
 if (unlockParam != null) game.setUnlocked(unlockParam);
 
