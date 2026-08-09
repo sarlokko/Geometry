@@ -1,6 +1,6 @@
-import { CONFIG } from "./config.js?v=20260809e";
-import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809e";
-import { AudioBus } from "./audio.js?v=20260809e";
+import { CONFIG } from "./config.js?v=20260809f";
+import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809f";
+import { AudioBus } from "./audio.js?v=20260809f";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_BEST_PREFIX = "neon-dash-best-w";
