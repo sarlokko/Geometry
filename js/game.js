@@ -1,6 +1,6 @@
-import { CONFIG } from "./config.js?v=20260809d";
-import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809d";
-import { AudioBus } from "./audio.js?v=20260809d";
+import { CONFIG } from "./config.js?v=20260809e";
+import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809e";
+import { AudioBus } from "./audio.js?v=20260809e";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_BEST_PREFIX = "neon-dash-best-w";
@@ -144,9 +144,15 @@ export class Game {
     if (mode === "ship" || mode === "ufo" || mode === "wave") {
       y = CONFIG.GROUND_Y * 0.45;
     } else if (mode === "ball") {
-      // Start above the first pad with a clean arc (must not smack the ceiling)
-      y = CONFIG.GROUND_Y - 170;
-      vy = CONFIG.BALL_BOUNCE;
+      if (world.ballKind === "walls") {
+        // Wall-bounce ball starts on the floor; tap flips gravity
+        y = CONFIG.GROUND_Y - size;
+        vy = 0;
+      } else {
+        // Yellow-orb ball starts mid-arc toward the first orb
+        y = CONFIG.GROUND_Y - 170;
+        vy = CONFIG.BALL_BOUNCE;
+      }
     }
 
     this.player = {
@@ -156,13 +162,14 @@ export class Game {
       vy,
       w: size,
       h: size,
-      onGround: mode === "cube",
+      onGround: mode === "cube" || (mode === "ball" && world.ballKind === "walls"),
       mode,
       gravityDir: 1,
       rotation: 0,
       alive: true,
       worldX: CONFIG.PLAYER_X,
       sizeScale: scale,
+      ballKind: world.ballKind || "pads",
     };
     this.cameraX = 0;
     this.particles = [];
@@ -221,30 +228,22 @@ export class Game {
     }
 
     if (p.mode === "ball") {
-      // Small tap boost (recovery) + orb launches
-      if (this.orbBuffer) {
-        const orb = this.findTouching("orb");
-        if (orb) {
-          p.vy = CONFIG.ORB_VELOCITY * p.gravityDir;
-          this.orbBuffer = false;
-          this.jumpBuffer = 0;
-          orb._used = true;
-          this.audio.orb();
-          this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, this.colors.orb);
-          return true;
-        }
-      }
-      if (!this._ballTapLock || this._ballTapLock <= 0) {
-        // Only help while falling — keeps pad rhythm as the main mechanic
-        if (p.vy > 80) {
-          p.vy = Math.min(p.vy, 0) + CONFIG.BALL_TAP_BOOST;
-          this._ballTapLock = 0.35;
+      const kind = p.ballKind || this.level?.world?.ballKind || "pads";
+      if (kind === "walls") {
+        // Rimbalzo sui muri: tap flips gravity between floor and ceiling
+        if (!this._ballTapLock || this._ballTapLock <= 0) {
+          p.gravityDir *= -1;
+          p.onGround = false;
+          p.vy = CONFIG.JUMP_VELOCITY * 0.22 * p.gravityDir;
+          this._ballTapLock = 0.16;
           this.jumpBuffer = 0;
           this.audio.jump();
-          this.burst(p.x + p.w / 2, p.y + p.h / 2, 5, this.colors.playerBall);
+          this.burst(p.x + p.w / 2, p.y + p.h / 2, 8, this.colors.playerBall);
           return true;
         }
+        return false;
       }
+      // Yellow-orb ball: no free boost — you must hit the yellow orbs
       return false;
     }
 
@@ -411,19 +410,26 @@ export class Game {
   resolveBounds(world, dt) {
     const p = this.player;
     const gDir = p.gravityDir;
-    const lethalFloor = world.lethalGround || p.mode === "ball" || p.mode === "wave";
+    const ballKind = p.ballKind || world.ballKind || "pads";
+    const wallBall = p.mode === "ball" && ballKind === "walls";
+    const padBall = p.mode === "ball" && ballKind !== "walls";
+    const lethalFloor =
+      world.lethalGround || padBall || p.mode === "wave";
     const lethalCeil = world.lethalCeiling || p.mode === "wave";
 
     p.onGround = false;
 
     // Floor
     if (p.y + p.h >= CONFIG.GROUND_Y) {
-      if (lethalFloor || (gDir === -1 && FLY_MODES.has(p.mode))) {
+      if (lethalFloor || (gDir === -1 && FLY_MODES.has(p.mode) && !wallBall)) {
         p.y = CONFIG.GROUND_Y - p.h;
         this.die();
         return;
       }
-      if (gDir === 1 && (p.mode === "cube" || p.mode === "ufo" || p.mode === "ship")) {
+      if (
+        gDir === 1 &&
+        (p.mode === "cube" || p.mode === "ufo" || p.mode === "ship" || wallBall)
+      ) {
         p.y = CONFIG.GROUND_Y - p.h;
         p.vy = 0;
         p.onGround = true;
@@ -431,7 +437,7 @@ export class Game {
         if (p.mode === "cube") {
           p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
         }
-      } else if (gDir === -1 && p.mode === "cube") {
+      } else if (gDir === -1 && (p.mode === "cube" || wallBall)) {
         // Inverted: floor acts as ceiling clamp
         p.y = CONFIG.GROUND_Y - p.h;
         if (p.vy > 0) p.vy = 0;
@@ -440,7 +446,7 @@ export class Game {
         this.die();
         return;
       }
-    } else if (p.mode === "cube" && gDir === 1) {
+    } else if ((p.mode === "cube" || wallBall) && gDir === 1) {
       this.coyote = Math.max(0, this.coyote - dt);
     }
 
@@ -451,21 +457,23 @@ export class Game {
         this.die();
         return;
       }
-      if (gDir === -1 && p.mode === "cube") {
+      if (gDir === -1 && (p.mode === "cube" || wallBall)) {
         p.y = CONFIG.CEILING_Y;
         p.vy = 0;
         p.onGround = true;
         this.coyote = CONFIG.COYOTE_TIME;
-        p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
-      } else if (p.mode === "ball") {
-        // Soft ceiling clamp — only ceiling pads should reverse the bounce
+        if (p.mode === "cube") {
+          p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+        }
+      } else if (padBall) {
+        // Soft ceiling clamp — yellow orbs reverse the bounce
         p.y = CONFIG.CEILING_Y;
         if (p.vy < 0) p.vy *= -0.25;
       } else {
         p.y = CONFIG.CEILING_Y;
         if (p.vy < 0) p.vy = 0;
       }
-    } else if (p.mode === "cube" && gDir === -1 && !p.onGround) {
+    } else if ((p.mode === "cube" || wallBall) && gDir === -1 && !p.onGround) {
       this.coyote = Math.max(0, this.coyote - dt);
     }
   }
@@ -490,27 +498,43 @@ export class Game {
         const blockBox = { x: box.x + 4, y: box.y, w: box.w - 8, h: box.h };
         if (!aabb(blockBox, o)) continue;
 
-        // Ball treats solid blocks as bounce surfaces (not instant death)
+        // Wall-ball lands on blocks; yellow-orb ball dies on solid geometry
         if (p.mode === "ball") {
-          const fromTop = this._prevWorldY + p.h <= o.y + 14 && p.vy >= 0;
-          const fromBottom = this._prevWorldY >= o.y + o.h - 14 && p.vy <= 0;
-          if (fromTop) {
-            p.y = o.y - p.h;
-            p.vy = CONFIG.BALL_BOUNCE;
-            this._padLock = 0.1;
-            this.audio.pad();
-            this.burst(o.x + o.w / 2, o.y, 8, C.pad);
-          } else if (fromBottom) {
-            p.y = o.y + o.h;
-            p.vy = -CONFIG.BALL_BOUNCE * 0.85;
-            this._padLock = 0.1;
-            this.audio.pad();
-            this.burst(o.x + o.w / 2, o.y + o.h, 8, C.pad);
-          } else {
-            this.die();
-            return;
+          const kind = p.ballKind || this.level?.world?.ballKind || "pads";
+          if (kind === "walls") {
+            if (gDir === 1) {
+              const fromTop = this._prevWorldY + p.h <= o.y + 16 && p.vy >= -60;
+              if (fromTop) {
+                p.y = o.y - p.h;
+                p.vy = 0;
+                p.onGround = true;
+                this.coyote = CONFIG.COYOTE_TIME;
+              } else if (
+                Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x) >
+                12
+              ) {
+                this.die();
+                return;
+              }
+            } else {
+              const fromBottom = this._prevWorldY >= o.y + o.h - 16 && p.vy <= 60;
+              if (fromBottom) {
+                p.y = o.y + o.h;
+                p.vy = 0;
+                p.onGround = true;
+                this.coyote = CONFIG.COYOTE_TIME;
+              } else if (
+                Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x) >
+                12
+              ) {
+                this.die();
+                return;
+              }
+            }
+            continue;
           }
-          continue;
+          this.die();
+          return;
         }
 
         if (p.mode === "wave") {
@@ -558,28 +582,39 @@ export class Game {
       }
 
       if (o.type === "pad" && this._padLock <= 0) {
-        // Ball gets a slightly taller/wider pad catch window for fair bounces
-        const padHit =
-          p.mode === "ball" ? inflate(o, 14) : o;
-        if (!aabb(box, padHit)) {
-          /* miss */
-        } else {
+        const padHit = o;
+        if (aabb(box, padHit)) {
           const dir = o.dir || 1;
-          // Only bounce when approaching the pad from the correct side
           const approaching = dir === 1 ? p.vy >= -20 : p.vy <= 20;
-          if (approaching) {
-            const strength = p.mode === "ball" ? CONFIG.BALL_BOUNCE : CONFIG.PAD_VELOCITY;
-            p.vy = strength * dir;
+          if (approaching && p.mode === "cube") {
+            p.vy = CONFIG.PAD_VELOCITY * dir;
             p.onGround = false;
-            // Nudge off the pad so we don't immediately re-collide
-            if (p.mode === "ball") {
-              if (dir === 1) p.y = Math.min(p.y, o.y - p.h - 1);
-              else p.y = Math.max(p.y, o.y + o.h + 1);
-            }
             this._padLock = 0.14;
             this.audio.pad();
             this.burst(o.x + o.w / 2, o.y + o.h / 2, 12, C.pad);
           }
+        }
+      }
+
+      // Yellow orbs: mandatory bounce points for the pad-ball
+      if (
+        o.type === "orb" &&
+        p.mode === "ball" &&
+        (p.ballKind || this.level?.world?.ballKind || "pads") !== "walls" &&
+        this._padLock <= 0 &&
+        aabb(box, inflate(o, 12))
+      ) {
+        const dir = o.dir || 1;
+        const approaching = dir === 1 ? p.vy >= -20 : p.vy <= 20;
+        if (approaching) {
+          p.vy = CONFIG.BALL_BOUNCE * dir;
+          p.onGround = false;
+          if (dir === 1) p.y = Math.min(p.y, o.y - p.h - 1);
+          else p.y = Math.max(p.y, o.y + o.h + 1);
+          o._used = true;
+          this._padLock = 0.12;
+          this.audio.orb();
+          this.burst(o.x + o.w / 2, o.y + o.h / 2, 16, C.orb);
         }
       }
 
@@ -594,8 +629,8 @@ export class Game {
             this._flash = 0.35;
             this.burst(o.x + o.w / 2, o.y + o.h / 2, 20, C.portalFlip);
           }
-        } else if (p.mode !== o.mode) {
-          this.enterMode(o.mode);
+        } else if (p.mode !== o.mode || (o.ballKind && p.ballKind !== o.ballKind)) {
+          this.enterMode(o.mode, o.ballKind);
           this.audio.portal();
           this._flash = 0.35;
           this.burst(o.x + o.w / 2, o.y + o.h / 2, 20, portalColor(o.mode, C));
@@ -608,7 +643,7 @@ export class Game {
       }
     }
 
-    if (this.orbBuffer && (p.mode === "cube" || p.mode === "ball") && !p.onGround) {
+    if (this.orbBuffer && p.mode === "cube" && !p.onGround) {
       const orb = this.findTouching("orb");
       if (orb) {
         p.vy = CONFIG.ORB_VELOCITY * p.gravityDir;
@@ -620,7 +655,7 @@ export class Game {
     }
   }
 
-  enterMode(mode) {
+  enterMode(mode, ballKind) {
     const p = this.player;
     p.mode = mode;
     p.onGround = false;
@@ -630,7 +665,13 @@ export class Game {
       p.w = size;
       p.h = size;
       p.y = cy - size / 2;
-      if (p.vy > -200) p.vy = CONFIG.BALL_BOUNCE;
+      p.ballKind = ballKind || this.level?.world?.ballKind || "pads";
+      p.gravityDir = 1;
+      if (p.ballKind === "walls") {
+        p.vy = Math.min(p.vy, 0);
+      } else if (p.vy > -200) {
+        p.vy = CONFIG.BALL_BOUNCE;
+      }
     } else if (mode === "cube") {
       const scale = this.level.world.sizeScale || 1;
       const size = Math.round(CONFIG.PLAYER_SIZE * scale);
@@ -639,12 +680,15 @@ export class Game {
       p.h = size;
       p.y = cy - size / 2;
       p.sizeScale = scale;
+      p.ballKind = null;
+      p.gravityDir = 1;
     } else {
       const size = CONFIG.PLAYER_SIZE;
       const cy = p.y + p.h / 2;
       p.w = size;
       p.h = size;
       p.y = cy - size / 2;
+      p.ballKind = null;
     }
   }
 
@@ -754,10 +798,13 @@ export class Game {
 
     this.drawParallax(ctx);
 
-    // Ground — danger tint when lethal
-    ctx.fillStyle = world.lethalGround ? "#2a0a12" : C.ground;
+    // Ground — danger tint when lethal (yellow-orb ball always)
+    const dangerFloor =
+      world.lethalGround ||
+      (this.player?.mode === "ball" && this.player?.ballKind !== "walls");
+    ctx.fillStyle = dangerFloor ? "#2a0a12" : C.ground;
     ctx.fillRect(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y);
-    ctx.strokeStyle = world.lethalGround ? C.spike : C.groundLine;
+    ctx.strokeStyle = dangerFloor ? C.spike : C.groundLine;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y);
