@@ -1,4 +1,4 @@
-import { CONFIG } from "./config.js?v=20260809l";
+import { CONFIG } from "./config.js?v=20260809m";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
