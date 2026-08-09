@@ -1,5 +1,5 @@
-import { Game } from "./game.js?v=20260809k";
-import { WORLDS, STAGE_COUNT, STAGE_LABELS } from "./worlds.js?v=20260809k";
+import { Game } from "./game.js?v=20260809l";
+import { WORLDS, STAGE_COUNT, STAGE_LABELS } from "./worlds.js?v=20260809l";
 
 const els = {
   menu: document.getElementById("menu"),

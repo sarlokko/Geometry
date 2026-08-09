@@ -1,4 +1,4 @@
-import { CONFIG } from "./config.js?v=20260809k";
+import { CONFIG } from "./config.js?v=20260809l";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
@@ -204,7 +204,10 @@ export function clampStage(stage) {
 /** Fill large spike gaps on higher stages. */
 function densifyHazards(objects, stage) {
   if (stage <= 0) return;
-  const minGap = stage === 1 ? 110 : 78;
+  // Keep densified spikes out of post-portal landing windows (fall/rise ~0.6s).
+  const portalXs = objects.filter((o) => o.type === "portal").map((o) => o.x);
+  const nearPortal = (x) => portalXs.some((px) => x >= px - 40 && x <= px + 720);
+  const minGap = stage === 1 ? 520 : 380;
   const floor = objects
     .filter((o) => o.type === "spike" && (o.dir || 1) === 1)
     .sort((a, b) => a.x - b.x);
@@ -222,6 +225,7 @@ function densifyHazards(objects, stage) {
       const n = stage >= 2 && gap > minGap * 1.7 ? 2 : 1;
       for (let k = 1; k <= n; k++) {
         const x = a.x + (gap * k) / (n + 1);
+        if (nearPortal(x)) continue;
         if (a.dir === -1) extras.push({ type: "spike", x, y: C, w: 34, h: 34, dir: -1 });
         else extras.push({ type: "spike", x, y: G - 34, w: 34, h: 34, dir: 1 });
       }
@@ -325,44 +329,47 @@ function buildShip(objects, stage = 0) {
 
 /** 2 — Sottosopra */
 function buildMirror(objects, stage = 0) {
+  // After each flip portal the cube falls/rises for ~0.6s — keep ~650px clear
+  // before the next same-side hazard so stage II/III remain fair.
   addSpike(objects, 900);
   addSpike(objects, 1200);
   addBlock(objects, 1550, G - S, S * 3, S);
   addPortal(objects, 1950, "flip");
-  addSpikeCeil(objects, 2350);
-  addSpikeCeil(objects, 2700);
-  addBlock(objects, 3100, C, S * 4, S);
-  addPortal(objects, 3600, "flip");
-  addSpike(objects, 4000);
-  addBlock(objects, 4300, G - S, S * 2, S);
-  addBlock(objects, 4300 + S * 2, G - S * 2, S * 2, S);
-  addPortal(objects, 4800, "flip");
-  addSpikeCeil(objects, 5150);
-  addSpikeCeil(objects, 5320);
-  addSpikeCeil(objects, 5490);
-  addBlock(objects, 5800, C, S * 2, S);
-  addSpikeCeil(objects, 5800 + S * 2 + 50);
-  addPortal(objects, 6300, "flip");
-  addSpike(objects, 6800);
-  addSpike(objects, 7300);
-  addSpike(objects, 7480);
-  addPortal(objects, 7900, "flip");
-  addBlock(objects, 8300, C, S * 6, S);
-  addSpikeCeil(objects, 8300 + S * 6 + 80);
-  addSpikeCeil(objects, 9000);
-  addPortal(objects, 9400, "flip");
-  addSpike(objects, 9800);
-  addSpike(objects, 10000);
-  addBlock(objects, 10350, G - S, S * 2, S);
-  addSpike(objects, 10350 + S * 2 + 70);
-  addPortal(objects, 10900, "flip");
-  addSpikeCeil(objects, 11300);
-  addBlock(objects, 11650, C, S * 3, S);
-  addSpikeCeil(objects, 11650 + S * 3 + 60);
-  addPortal(objects, 12200, "flip");
-  addSpike(objects, 12600);
-  addBlock(objects, 12950, G - S, S * 5, S);
-  return 13500;
+  addSpikeCeil(objects, 2480);
+  addSpikeCeil(objects, 2920);
+  addBlock(objects, 3350, C, S * 4, S);
+  addPortal(objects, 3900, "flip");
+  // Land ~4150–4220 then hop; spike sits mid-arc, stairs after the landing.
+  addSpike(objects, 4400);
+  addBlock(objects, 4950, G - S, S * 2, S);
+  addBlock(objects, 4950 + S * 2, G - S * 2, S * 2, S);
+  addPortal(objects, 5500, "flip");
+  addSpikeCeil(objects, 6020);
+  addSpikeCeil(objects, 6350);
+  addSpikeCeil(objects, 6580);
+  addBlock(objects, 6850, C, S * 2, S);
+  addSpikeCeil(objects, 6850 + S * 2 + 50);
+  addPortal(objects, 7400, "flip");
+  addSpike(objects, 7920);
+  addSpike(objects, 8450);
+  addSpike(objects, 8680);
+  addPortal(objects, 9200, "flip");
+  addBlock(objects, 9850, C, S * 6, S);
+  addSpikeCeil(objects, 9850 + S * 6 + 80);
+  addSpikeCeil(objects, 10550);
+  addPortal(objects, 11000, "flip");
+  addSpike(objects, 11520);
+  addSpike(objects, 11900);
+  addBlock(objects, 12300, G - S, S * 2, S);
+  addSpike(objects, 12300 + S * 2 + 70);
+  addPortal(objects, 12850, "flip");
+  addSpikeCeil(objects, 13500);
+  addBlock(objects, 13850, C, S * 3, S);
+  addSpikeCeil(objects, 13850 + S * 3 + 60);
+  addPortal(objects, 14400, "flip");
+  addSpike(objects, 14920);
+  addBlock(objects, 15350, G - S, S * 5, S);
+  return 15950;
 }
 
 /** 3 — Zigzag onda */
