@@ -1,6 +1,6 @@
 # Neon Dash (`geometry`)
 
-Clone web di **Geometry Dash**: platformer ritmico in cui il cubo corre da solo e tu controlli i salti.
+Clone web di **Geometry Dash**: platformer ritmico in cui corri da solo e controlli i salti (o la spinta, a seconda del mondo).
 
 ## Come giocare
 
@@ -14,35 +14,26 @@ Apri `http://localhost:8080` nel browser.
 
 | Input | Azione |
 | --- | --- |
-| Spazio / Click / Tocco | Salta (o spinta in modalità nave) |
+| Spazio / Click / Tocco | Salta / thrust / flap (dipende dal mondo) |
 | Frecce | Seleziona mondo (menu) |
 | Esc | Pausa |
 
-### Mondi
+### Mondi (ognuno con una peculiarità)
 
-Dieci mondi selezionabili, ognuno più difficile del precedente (velocità, densità ostacoli, BPM della musica). Completare un mondo sblocca il successivo.
+1. **Aurora Run** — solo cubo, salti classici  
+2. **Micro Mile** — cubo mini, piattaforme strette  
+3. **Pad Pulse** — rimbalzi sui pad  
+4. **Orb Garden** — orb in aria  
+5. **Ship Harbor** — astronave (hold per salire)  
+6. **Neverland** — pallina: non toccare terra  
+7. **Flap Fields** — UFO a flap  
+8. **Wave Rift** — onda (hold = su, rilascia = giù)  
+9. **Mirror Vault** — gravità invertita  
+10. **Neon Apex** — roulette di tutte le modalità  
 
-1. **Aurora Run** — primi salti  
-2. **Pulse Valley** — ritmo più stretto  
-3. **Sky Bridge** — piattaforme  
-4. **Bounce Circuit** — pad  
-5. **Orb Garden** — orb in aria  
-6. **Ship Harbor** — modalità nave  
-7. **Dual Drift** — cubo + nave  
-8. **Spike Storm** — alta densità  
-9. **Void Warp** — nave caotica  
-10. **Neon Apex** — il più duro  
+Completare un mondo sblocca il successivo. Progresso e sblocco restano in `localStorage`.
 
-### Meccaniche
-
-- **Cubo** — salto da terra, rotazione in aria
-- **Spike** — contatto = morte e restart dall’inizio del mondo
-- **Pad giallo** — rimbalzo automatico
-- **Orb gialla** — salta mentre la tocchi (anche in aria)
-- **Portale** — passa a modalità nave (hold per salire) e torna al cubo
-- **Musica a ritmo** — bed procedurale Web Audio sincronizzato al BPM del mondo
-
-Il progresso per mondo e lo sblocco sono salvati in `localStorage`.
+Musica procedurale Web Audio sincronizzata al BPM del mondo.
 
 ## Struttura
 
@@ -53,8 +44,8 @@ Il progresso per mondo e lo sblocco sono salvati in `localStorage`.
   css/style.css
   js/
     main.js      # UI, selezione mondi, input
-    game.js      # loop, fisica, collisioni, render
-    worlds.js    # 10 mondi + layout
+    game.js      # loop, fisiche per modalità, collisioni, render
+    worlds.js    # 10 mondi + layout + peculiarità
     level.js     # re-export mondi
     config.js    # costanti
     audio.js     # SFX + musica ritmica (Web Audio)

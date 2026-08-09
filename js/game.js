@@ -6,6 +6,8 @@ const STORAGE_ATTEMPTS = "neon-dash-attempts";
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_BEST_PREFIX = "neon-dash-best-w";
 
+const FLY_MODES = new Set(["ship", "ufo", "wave", "ball"]);
+
 export class Game {
   /**
    * @param {HTMLCanvasElement} canvas
@@ -17,7 +19,7 @@ export class Game {
     this.hooks = hooks;
     this.audio = new AudioBus();
 
-    this.state = "menu"; // menu | playing | paused | dead | complete
+    this.state = "menu";
     this.worldId = 0;
     this.attempt = Number(localStorage.getItem(STORAGE_ATTEMPTS) || 0);
     this.unlocked = Number(localStorage.getItem(STORAGE_UNLOCK) || 0);
@@ -26,13 +28,13 @@ export class Game {
 
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.scale = 1;
-    this.offsetY = 0;
 
     this.particles = [];
     this.cameraX = 0;
     this.held = false;
     this.orbBuffer = false;
     this._prevWorldY = 0;
+    this._padLock = 0;
 
     this.colors = { ...WORLDS[0].colors };
     this.level = createWorldLevel(0);
@@ -60,6 +62,11 @@ export class Game {
 
   getUnlocked() {
     return this.unlocked;
+  }
+
+  setUnlocked(worldId) {
+    this.unlocked = clampWorld(worldId);
+    localStorage.setItem(STORAGE_UNLOCK, String(this.unlocked));
   }
 
   getWorldMeta(worldId = this.worldId) {
@@ -93,7 +100,6 @@ export class Game {
     this.colors = { ...this.level.world.colors };
     this.best = this.loadBest(this.worldId);
     this.resetPlayer(false);
-    this.player.vx = this.level.world.speed;
     this.state = "playing";
     this.audio.ensure();
     this.audio.setTrack({ bpm: this.level.world.bpm, worldId: this.worldId });
@@ -123,19 +129,35 @@ export class Game {
   }
 
   resetPlayer(soft) {
-    const speed = this.level?.world?.speed ?? CONFIG.SPEED;
+    const world = this.level?.world ?? WORLDS[0];
+    const scale = world.sizeScale || 1;
+    const mode = world.startMode || "cube";
+    const size =
+      mode === "ball" ? CONFIG.BALL_SIZE : Math.round(CONFIG.PLAYER_SIZE * scale);
+
+    let y = CONFIG.GROUND_Y - size;
+    let vy = 0;
+    if (mode === "ship" || mode === "ufo" || mode === "wave") {
+      y = CONFIG.GROUND_Y * 0.45;
+    } else if (mode === "ball") {
+      y = CONFIG.GROUND_Y - 220;
+      vy = CONFIG.BALL_BOUNCE;
+    }
+
     this.player = {
       x: CONFIG.PLAYER_X,
-      y: CONFIG.GROUND_Y - CONFIG.PLAYER_SIZE,
-      vx: speed,
-      vy: 0,
-      w: CONFIG.PLAYER_SIZE,
-      h: CONFIG.PLAYER_SIZE,
-      onGround: true,
-      mode: "cube",
+      y,
+      vx: world.speed ?? CONFIG.SPEED,
+      vy,
+      w: size,
+      h: size,
+      onGround: mode === "cube",
+      mode,
+      gravityDir: 1,
       rotation: 0,
       alive: true,
       worldX: CONFIG.PLAYER_X,
+      sizeScale: scale,
     };
     this.cameraX = 0;
     this.particles = [];
@@ -143,6 +165,7 @@ export class Game {
     this.orbBuffer = false;
     this.coyote = CONFIG.COYOTE_TIME;
     this.jumpBuffer = 0;
+    this._padLock = 0;
     this._shake = 0;
     this._flash = 0;
     this.progress = 0;
@@ -158,6 +181,8 @@ export class Game {
       best: Math.floor(this.best * 100),
       worldId: this.worldId,
       worldName: world.name,
+      quirk: world.quirk,
+      mode: this.player?.mode,
       bpm: world.bpm,
     };
   }
@@ -178,24 +203,48 @@ export class Game {
     const p = this.player;
     if (!p.alive) return;
 
-    if (p.mode === "ship") {
-      return;
+    if (p.mode === "ship" || p.mode === "wave") return;
+
+    if (p.mode === "ufo") {
+      p.vy = CONFIG.UFO_FLAP * p.gravityDir;
+      p.onGround = false;
+      this.jumpBuffer = 0;
+      this.audio.jump();
+      this.burst(p.x + p.w / 2, p.y + p.h / 2, 6, this.colors.playerUfo);
+      return true;
     }
 
+    if (p.mode === "ball") {
+      // Ball only gets air control via orbs
+      if (this.orbBuffer) {
+        const orb = this.findTouching("orb");
+        if (orb) {
+          p.vy = CONFIG.ORB_VELOCITY * p.gravityDir;
+          this.orbBuffer = false;
+          orb._used = true;
+          this.audio.orb();
+          this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, this.colors.orb);
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // cube
     if (p.onGround || this.coyote > 0) {
-      p.vy = CONFIG.JUMP_VELOCITY;
+      p.vy = CONFIG.JUMP_VELOCITY * p.gravityDir;
       p.onGround = false;
       this.coyote = 0;
       this.jumpBuffer = 0;
       this.audio.jump();
-      this.burst(p.x + p.w / 2, p.y + p.h, 8, this.colors.player);
+      this.burst(p.x + p.w / 2, p.y + p.h / 2, 8, this.colors.player);
       return true;
     }
 
     if (this.orbBuffer) {
       const orb = this.findTouching("orb");
       if (orb) {
-        p.vy = CONFIG.ORB_VELOCITY;
+        p.vy = CONFIG.ORB_VELOCITY * p.gravityDir;
         p.onGround = false;
         this.orbBuffer = false;
         this.jumpBuffer = 0;
@@ -250,54 +299,37 @@ export class Game {
 
   update(dt) {
     const p = this.player;
+    const world = this.level.world;
     this._bgPulse += dt;
+    if (this._padLock > 0) this._padLock = Math.max(0, this._padLock - dt);
 
     p.worldX += p.vx * dt;
     this.cameraX = p.worldX - CONFIG.PLAYER_X;
     p.x = CONFIG.PLAYER_X;
 
-    if (p.mode === "ship") {
-      const gravity = CONFIG.SHIP_GRAVITY;
-      p.vy += gravity * dt;
-      if (this.held) p.vy += CONFIG.SHIP_THRUST * dt;
-      p.vy = clamp(p.vy, -CONFIG.MAX_FALL, CONFIG.MAX_FALL);
-    } else {
-      p.vy += CONFIG.GRAVITY * dt;
-      if (p.vy > CONFIG.MAX_FALL) p.vy = CONFIG.MAX_FALL;
-    }
+    this.applyPhysics(dt);
 
     this._prevWorldY = p.y;
     p.y += p.vy * dt;
 
-    p.onGround = false;
-    if (p.y + p.h >= CONFIG.GROUND_Y) {
-      p.y = CONFIG.GROUND_Y - p.h;
-      p.vy = 0;
-      p.onGround = true;
-      this.coyote = CONFIG.COYOTE_TIME;
-      if (p.mode === "cube") {
-        p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
-      }
-    } else if (p.mode === "cube") {
-      this.coyote = Math.max(0, this.coyote - dt);
-    }
+    this.resolveBounds(world, dt);
 
-    if (p.y < 40) {
-      p.y = 40;
-      if (p.vy < 0) p.vy = 0;
-    }
-
+    // Rotation / tilt
     if (p.mode === "cube" && !p.onGround) {
-      p.rotation += CONFIG.ROTATION_SPEED * dt;
-    } else if (p.mode === "ship") {
+      p.rotation += CONFIG.ROTATION_SPEED * dt * p.gravityDir;
+    } else if (p.mode === "ship" || p.mode === "ufo") {
       p.rotation = clamp(p.vy / 1400, -0.7, 0.7);
+    } else if (p.mode === "wave") {
+      p.rotation = this.held ? -0.7 * p.gravityDir : 0.7 * p.gravityDir;
+    } else if (p.mode === "ball") {
+      p.rotation += (p.vx / 80) * dt;
     }
 
     this.resolveObjects();
 
     if (this.jumpBuffer > 0) {
       this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
-      if (p.mode === "cube" && this.tryJump()) {
+      if ((p.mode === "cube" || p.mode === "ufo") && this.tryJump()) {
         /* consumed */
       }
     }
@@ -314,7 +346,7 @@ export class Game {
     if (this._shake > 0) this._shake = Math.max(0, this._shake - dt * 3);
     if (this._flash > 0) this._flash = Math.max(0, this._flash - dt * 3);
 
-    if (Math.random() < 0.6) {
+    if (Math.random() < 0.55) {
       this.particles.push({
         x: p.x + 4,
         y: p.y + p.h * (0.3 + Math.random() * 0.4),
@@ -323,15 +355,110 @@ export class Game {
         life: 0.35 + Math.random() * 0.2,
         max: 0.55,
         size: 3 + Math.random() * 3,
-        color: p.mode === "ship" ? this.colors.playerShip : this.colors.particle,
+        color: modeColor(p.mode, this.colors),
       });
     }
   }
 
+  applyPhysics(dt) {
+    const p = this.player;
+    const gDir = p.gravityDir;
+
+    if (p.mode === "ship") {
+      p.vy += CONFIG.SHIP_GRAVITY * gDir * dt;
+      if (this.held) p.vy += CONFIG.SHIP_THRUST * gDir * dt;
+      p.vy = clamp(p.vy, -CONFIG.MAX_FALL, CONFIG.MAX_FALL);
+      return;
+    }
+
+    if (p.mode === "ufo") {
+      p.vy += CONFIG.UFO_GRAVITY * gDir * dt;
+      p.vy = clamp(p.vy, -CONFIG.MAX_FALL, CONFIG.MAX_FALL);
+      return;
+    }
+
+    if (p.mode === "wave") {
+      const dir = this.held ? -1 : 1;
+      p.vy = CONFIG.WAVE_VY * dir * gDir;
+      return;
+    }
+
+    // cube + ball
+    p.vy += CONFIG.GRAVITY * gDir * dt;
+    if (gDir === 1 && p.vy > CONFIG.MAX_FALL) p.vy = CONFIG.MAX_FALL;
+    if (gDir === -1 && p.vy < -CONFIG.MAX_FALL) p.vy = -CONFIG.MAX_FALL;
+  }
+
+  resolveBounds(world, dt) {
+    const p = this.player;
+    const gDir = p.gravityDir;
+    const lethalFloor = world.lethalGround || p.mode === "ball" || p.mode === "wave";
+    const lethalCeil = world.lethalCeiling || p.mode === "wave";
+
+    p.onGround = false;
+
+    // Floor
+    if (p.y + p.h >= CONFIG.GROUND_Y) {
+      if (lethalFloor || (gDir === -1 && FLY_MODES.has(p.mode))) {
+        p.y = CONFIG.GROUND_Y - p.h;
+        this.die();
+        return;
+      }
+      if (gDir === 1 && (p.mode === "cube" || p.mode === "ufo" || p.mode === "ship")) {
+        p.y = CONFIG.GROUND_Y - p.h;
+        p.vy = 0;
+        p.onGround = true;
+        this.coyote = CONFIG.COYOTE_TIME;
+        if (p.mode === "cube") {
+          p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+        }
+      } else if (gDir === -1 && p.mode === "cube") {
+        // Inverted: floor acts as ceiling clamp
+        p.y = CONFIG.GROUND_Y - p.h;
+        if (p.vy > 0) p.vy = 0;
+      } else {
+        p.y = CONFIG.GROUND_Y - p.h;
+        this.die();
+        return;
+      }
+    } else if (p.mode === "cube" && gDir === 1) {
+      this.coyote = Math.max(0, this.coyote - dt);
+    }
+
+    // Ceiling
+    if (p.y <= CONFIG.CEILING_Y) {
+      if (lethalCeil) {
+        p.y = CONFIG.CEILING_Y;
+        this.die();
+        return;
+      }
+      if (gDir === -1 && p.mode === "cube") {
+        p.y = CONFIG.CEILING_Y;
+        p.vy = 0;
+        p.onGround = true;
+        this.coyote = CONFIG.COYOTE_TIME;
+        p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+      } else if (p.mode === "ball") {
+        p.y = CONFIG.CEILING_Y;
+        if (p.vy < 0) {
+          p.vy = -CONFIG.BALL_BOUNCE * 0.75;
+          this.audio.pad();
+        }
+      } else {
+        p.y = CONFIG.CEILING_Y;
+        if (p.vy < 0) p.vy = 0;
+      }
+    } else if (p.mode === "cube" && gDir === -1 && !p.onGround) {
+      this.coyote = Math.max(0, this.coyote - dt);
+    }
+  }
+
   resolveObjects() {
+    if (this.state !== "playing") return;
     const p = this.player;
     const box = this.playerWorldBox();
     const C = this.colors;
+    const gDir = p.gravityDir;
 
     for (const o of this.level.objects) {
       if (o._used) continue;
@@ -345,39 +472,82 @@ export class Game {
       if (o.type === "block") {
         const blockBox = { x: box.x + 4, y: box.y, w: box.w - 8, h: box.h };
         if (!aabb(blockBox, o)) continue;
-        const fromTop = this._prevWorldY + p.h <= o.y + 16 && p.vy >= -60;
-        if (fromTop) {
-          p.y = o.y - p.h;
-          p.vy = 0;
-          p.onGround = true;
-          this.coyote = CONFIG.COYOTE_TIME;
-          if (p.mode === "cube") {
-            p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
-          }
-        } else if (p.mode === "ship") {
+
+        if (p.mode === "wave" || p.mode === "ball") {
           this.die();
           return;
+        }
+
+        if (p.mode === "ship" || p.mode === "ufo") {
+          this.die();
+          return;
+        }
+
+        // cube landing relative to gravity
+        if (gDir === 1) {
+          const fromTop = this._prevWorldY + p.h <= o.y + 16 && p.vy >= -60;
+          if (fromTop) {
+            p.y = o.y - p.h;
+            p.vy = 0;
+            p.onGround = true;
+            this.coyote = CONFIG.COYOTE_TIME;
+            p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+          } else {
+            const overlapX = Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
+            if (overlapX > 12) {
+              this.die();
+              return;
+            }
+          }
         } else {
-          const overlapX = Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
-          if (overlapX > 12) {
-            this.die();
-            return;
+          const fromBottom = this._prevWorldY >= o.y + o.h - 16 && p.vy <= 60;
+          if (fromBottom) {
+            p.y = o.y + o.h;
+            p.vy = 0;
+            p.onGround = true;
+            this.coyote = CONFIG.COYOTE_TIME;
+            p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+          } else {
+            const overlapX = Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
+            if (overlapX > 12) {
+              this.die();
+              return;
+            }
           }
         }
       }
 
-      if (o.type === "pad" && aabb(box, o) && p.vy >= -20) {
-        p.vy = CONFIG.PAD_VELOCITY;
-        p.onGround = false;
-        this.audio.pad();
-        this.burst(o.x + o.w / 2, o.y, 12, C.pad);
+      if (o.type === "pad" && aabb(box, o) && this._padLock <= 0) {
+        const dir = o.dir || 1;
+        const fallingOnto = dir === 1 ? p.vy >= -30 : p.vy <= 30;
+        if (fallingOnto || p.mode === "ball") {
+          // dir 1 = bounce up (negative y), dir -1 = bounce down
+          const strength = p.mode === "ball" ? CONFIG.BALL_BOUNCE : CONFIG.PAD_VELOCITY;
+          p.vy = strength * dir;
+          p.onGround = false;
+          this._padLock = 0.12;
+          this.audio.pad();
+          this.burst(o.x + o.w / 2, o.y + o.h / 2, 12, C.pad);
+        }
       }
 
-      if (o.type === "portal" && aabb(box, o) && p.mode !== o.mode) {
-        p.mode = o.mode;
-        this.audio.portal();
-        this._flash = 0.35;
-        this.burst(o.x + o.w / 2, o.y + o.h / 2, 20, o.mode === "ship" ? C.portalShip : C.portalCube);
+      if (o.type === "portal" && aabb(box, o)) {
+        if (o.mode === "flip") {
+          if (!o._used) {
+            o._used = true;
+            p.gravityDir *= -1;
+            p.vy *= -0.35;
+            p.onGround = false;
+            this.audio.portal();
+            this._flash = 0.35;
+            this.burst(o.x + o.w / 2, o.y + o.h / 2, 20, C.portalFlip);
+          }
+        } else if (p.mode !== o.mode) {
+          this.enterMode(o.mode);
+          this.audio.portal();
+          this._flash = 0.35;
+          this.burst(o.x + o.w / 2, o.y + o.h / 2, 20, portalColor(o.mode, C));
+        }
       }
 
       if (o.type === "finish" && box.x + box.w >= o.x) {
@@ -386,15 +556,43 @@ export class Game {
       }
     }
 
-    if (this.orbBuffer && p.mode === "cube" && !p.onGround) {
+    if (this.orbBuffer && (p.mode === "cube" || p.mode === "ball") && !p.onGround) {
       const orb = this.findTouching("orb");
       if (orb) {
-        p.vy = CONFIG.ORB_VELOCITY;
+        p.vy = CONFIG.ORB_VELOCITY * p.gravityDir;
         this.orbBuffer = false;
         orb._used = true;
         this.audio.orb();
         this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, C.orb);
       }
+    }
+  }
+
+  enterMode(mode) {
+    const p = this.player;
+    p.mode = mode;
+    p.onGround = false;
+    if (mode === "ball") {
+      const size = CONFIG.BALL_SIZE;
+      const cy = p.y + p.h / 2;
+      p.w = size;
+      p.h = size;
+      p.y = cy - size / 2;
+      if (p.vy > -200) p.vy = CONFIG.BALL_BOUNCE;
+    } else if (mode === "cube") {
+      const scale = this.level.world.sizeScale || 1;
+      const size = Math.round(CONFIG.PLAYER_SIZE * scale);
+      const cy = p.y + p.h / 2;
+      p.w = size;
+      p.h = size;
+      p.y = cy - size / 2;
+      p.sizeScale = scale;
+    } else {
+      const size = CONFIG.PLAYER_SIZE;
+      const cy = p.y + p.h / 2;
+      p.w = size;
+      p.h = size;
+      p.y = cy - size / 2;
     }
   }
 
@@ -406,7 +604,12 @@ export class Game {
     this.audio.stopBed();
     this._shake = 0.45;
     this._flash = 0.5;
-    this.burst(this.player.x + this.player.w / 2, this.player.y + this.player.h / 2, 28, this.colors.spike);
+    this.burst(
+      this.player.x + this.player.w / 2,
+      this.player.y + this.player.h / 2,
+      28,
+      this.colors.spike
+    );
 
     setTimeout(() => {
       if (this.state !== "dead") return;
@@ -415,7 +618,6 @@ export class Game {
       this.level = createWorldLevel(this.worldId);
       this.colors = { ...this.level.world.colors };
       this.resetPlayer(false);
-      this.player.vx = this.level.world.speed;
       this.state = "playing";
       this.audio.setTrack({ bpm: this.level.world.bpm, worldId: this.worldId });
       this.audio.startBed();
@@ -481,6 +683,7 @@ export class Game {
     const ctx = this.ctx;
     const { WIDTH, HEIGHT, GROUND_Y } = CONFIG;
     const C = this.colors;
+    const world = this.level.world;
     const shakeX = (Math.random() - 0.5) * this._shake * 24;
     const shakeY = (Math.random() - 0.5) * this._shake * 18;
 
@@ -496,20 +699,31 @@ export class Game {
 
     this.drawParallax(ctx);
 
-    ctx.fillStyle = C.ground;
+    // Ground — danger tint when lethal
+    ctx.fillStyle = world.lethalGround ? "#2a0a12" : C.ground;
     ctx.fillRect(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y);
-    ctx.strokeStyle = C.groundLine;
+    ctx.strokeStyle = world.lethalGround ? C.spike : C.groundLine;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y);
     ctx.lineTo(WIDTH, GROUND_Y);
     ctx.stroke();
 
+    if (world.lethalCeiling) {
+      ctx.fillStyle = "#2a0a12";
+      ctx.fillRect(0, 0, WIDTH, CONFIG.CEILING_Y);
+      ctx.strokeStyle = C.spike;
+      ctx.beginPath();
+      ctx.moveTo(0, CONFIG.CEILING_Y);
+      ctx.lineTo(WIDTH, CONFIG.CEILING_Y);
+      ctx.stroke();
+    }
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y);
     ctx.clip();
-    ctx.strokeStyle = hexAlpha(C.groundLine, 0.08);
+    ctx.strokeStyle = hexAlpha(world.lethalGround ? C.spike : C.groundLine, 0.1);
     ctx.lineWidth = 1;
     const scroll = -((this.cameraX * 0.8) % 48);
     for (let x = scroll; x < WIDTH + 48; x += 48) {
@@ -522,14 +736,13 @@ export class Game {
 
     for (const o of this.level.objects) {
       if (!nearCamera(o, this.cameraX, 80)) continue;
-      const sx = o.x - this.cameraX;
-      this.drawObject(ctx, o, sx);
+      this.drawObject(ctx, o, o.x - this.cameraX);
     }
 
-    for (const p of this.particles) {
-      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y, p.size, p.size);
+    for (const part of this.particles) {
+      ctx.globalAlpha = clamp(part.life / part.max, 0, 1);
+      ctx.fillStyle = part.color;
+      ctx.fillRect(part.x, part.y, part.size, part.size);
     }
     ctx.globalAlpha = 1;
 
@@ -600,9 +813,15 @@ export class Game {
     } else if (o.type === "spike") {
       ctx.fillStyle = C.spike;
       ctx.beginPath();
-      ctx.moveTo(sx, o.y + o.h);
-      ctx.lineTo(sx + o.w / 2, o.y);
-      ctx.lineTo(sx + o.w, o.y + o.h);
+      if (o.dir === -1) {
+        ctx.moveTo(sx, o.y);
+        ctx.lineTo(sx + o.w / 2, o.y + o.h);
+        ctx.lineTo(sx + o.w, o.y);
+      } else {
+        ctx.moveTo(sx, o.y + o.h);
+        ctx.lineTo(sx + o.w / 2, o.y);
+        ctx.lineTo(sx + o.w, o.y + o.h);
+      }
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = "rgba(255,255,255,0.25)";
@@ -611,7 +830,8 @@ export class Game {
       ctx.fillStyle = C.pad;
       ctx.fillRect(sx, o.y, o.w, o.h);
       ctx.fillStyle = "rgba(255,255,255,0.45)";
-      ctx.fillRect(sx + 4, o.y + 2, o.w - 8, 3);
+      const ly = o.dir === -1 ? o.y + o.h - 5 : o.y + 2;
+      ctx.fillRect(sx + 4, ly, o.w - 8, 3);
     } else if (o.type === "orb") {
       const pulse = 1 + Math.sin(performance.now() / 120) * 0.08;
       const r = (o.w / 2) * pulse;
@@ -624,12 +844,8 @@ export class Game {
       ctx.lineWidth = 3;
       ctx.strokeStyle = "#fff6b0";
       ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(20,20,20,0.35)";
-      ctx.stroke();
     } else if (o.type === "portal") {
-      const color = o.mode === "ship" ? C.portalShip : C.portalCube;
+      const color = portalColor(o.mode, C);
       const grad = ctx.createLinearGradient(sx, o.y, sx + o.w, o.y + o.h);
       grad.addColorStop(0, "transparent");
       grad.addColorStop(0.5, color);
@@ -639,6 +855,11 @@ export class Game {
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
       ctx.strokeRect(sx, o.y, o.w, o.h);
+      // mode glyph
+      ctx.fillStyle = color;
+      ctx.font = "bold 11px Orbitron, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(modeGlyph(o.mode), sx + o.w / 2, o.y - 6);
     } else if (o.type === "finish") {
       const stripe = 14;
       for (let i = 0; i < o.h; i += stripe) {
@@ -656,6 +877,7 @@ export class Game {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(p.rotation);
+
     if (p.mode === "ship") {
       ctx.fillStyle = C.playerShip;
       ctx.beginPath();
@@ -666,17 +888,81 @@ export class Game {
       ctx.fill();
       ctx.fillStyle = "#fff";
       ctx.fillRect(-p.w * 0.2, -6, 12, 12);
+    } else if (p.mode === "ball") {
+      ctx.fillStyle = C.playerBall;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(p.w * 0.35, 0);
+      ctx.strokeStyle = "rgba(20,10,0,0.35)";
+      ctx.stroke();
+    } else if (p.mode === "ufo") {
+      ctx.fillStyle = C.playerUfo;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.w * 0.5, p.h * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, -p.h * 0.12, p.w * 0.22, Math.PI, 0);
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fill();
+    } else if (p.mode === "wave") {
+      ctx.fillStyle = C.playerWave;
+      ctx.beginPath();
+      ctx.moveTo(-p.w * 0.45, p.h * 0.35);
+      ctx.lineTo(p.w * 0.45, 0);
+      ctx.lineTo(-p.w * 0.45, -p.h * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.45)";
+      ctx.stroke();
     } else {
+      // cube (possibly mini / inverted)
       ctx.fillStyle = C.player;
       ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
       ctx.strokeStyle = "rgba(255,255,255,0.55)";
-      ctx.lineWidth = 3;
+      ctx.lineWidth = Math.max(2, 3 * (p.sizeScale || 1));
       ctx.strokeRect(-p.w / 2 + 2, -p.h / 2 + 2, p.w - 4, p.h - 4);
       ctx.fillStyle = "rgba(4,16,24,0.35)";
-      ctx.fillRect(-6, -6, 12, 12);
+      const eye = Math.max(4, 12 * (p.sizeScale || 1));
+      ctx.fillRect(-eye / 2, -eye / 2, eye, eye);
+      if (p.gravityDir === -1) {
+        ctx.strokeStyle = C.portalFlip;
+        ctx.strokeRect(-p.w / 2 - 2, -p.h / 2 - 2, p.w + 4, p.h + 4);
+      }
     }
     ctx.restore();
   }
+}
+
+function modeColor(mode, C) {
+  if (mode === "ship") return C.playerShip;
+  if (mode === "ball") return C.playerBall;
+  if (mode === "ufo") return C.playerUfo;
+  if (mode === "wave") return C.playerWave;
+  return C.particle;
+}
+
+function portalColor(mode, C) {
+  if (mode === "ship") return C.portalShip;
+  if (mode === "ball") return C.portalBall;
+  if (mode === "ufo") return C.portalUfo;
+  if (mode === "wave") return C.portalWave;
+  if (mode === "flip") return C.portalFlip;
+  return C.portalCube;
+}
+
+function modeGlyph(mode) {
+  if (mode === "ship") return "SHIP";
+  if (mode === "ball") return "BALL";
+  if (mode === "ufo") return "UFO";
+  if (mode === "wave") return "WAVE";
+  if (mode === "flip") return "FLIP";
+  return "CUBE";
 }
 
 function aabb(a, b) {

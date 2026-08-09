@@ -13,6 +13,8 @@ const els = {
   completeStats: document.getElementById("complete-stats"),
   worldGrid: document.getElementById("world-grid"),
   btnNext: document.getElementById("btn-next"),
+  quirk: document.getElementById("quirk"),
+  selectedQuirk: document.getElementById("selected-quirk"),
   canvas: document.getElementById("game"),
 };
 
@@ -24,6 +26,7 @@ const game = new Game(els.canvas, {
     els.progress.textContent = `${data.progress}%`;
     els.progressFill.style.width = `${data.progress}%`;
     els.worldLabel.textContent = data.worldName;
+    if (els.quirk) els.quirk.textContent = data.quirk || "";
   },
   onPause: () => showOverlay("pause"),
   onComplete: (data) => {
@@ -101,6 +104,11 @@ function renderWorldGrid() {
 
     els.worldGrid.appendChild(btn);
   });
+
+  const selected = WORLDS[selectedWorld];
+  if (els.selectedQuirk && selected) {
+    els.selectedQuirk.textContent = selected.quirk;
+  }
 }
 
 function play(worldId = selectedWorld) {
@@ -210,6 +218,10 @@ els.canvas.addEventListener(
   { passive: false }
 );
 window.addEventListener("touchend", release);
+
+// Dev helper: ?unlock=9 unlocks all worlds for testing
+const unlockParam = new URLSearchParams(location.search).get("unlock");
+if (unlockParam != null) game.setUnlocked(unlockParam);
 
 renderWorldGrid();
 game.startAttract();

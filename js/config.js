@@ -2,9 +2,9 @@ export const CONFIG = {
   WIDTH: 1280,
   HEIGHT: 720,
   GROUND_Y: 560,
+  CEILING_Y: 48,
   PLAYER_SIZE: 42,
   PLAYER_X: 280,
-  // Slower run = more reaction time
   SPEED: 360,
   GRAVITY: 2400,
   JUMP_VELOCITY: -980,
@@ -14,10 +14,16 @@ export const CONFIG = {
   SHIP_GRAVITY: 1100,
   MAX_FALL: 1300,
   ROTATION_SPEED: 7.5,
-  // Extra forgiveness
   SPIKE_HITBOX_PAD: -10,
   COYOTE_TIME: 0.09,
   JUMP_BUFFER: 0.12,
+  // Mode-specific
+  BALL_BOUNCE: -1020,
+  BALL_SIZE: 36,
+  UFO_FLAP: -720,
+  UFO_GRAVITY: 1550,
+  WAVE_VY: 520,
+  MINI_SCALE: 0.55,
 };
 
 export const COLORS = {
