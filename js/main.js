@@ -99,7 +99,7 @@ function renderWorldGrid() {
     btn.addEventListener("click", () => {
       if (locked) return;
       selectedWorld = i;
-      renderWorldGrid();
+      play(i);
     });
 
     els.worldGrid.appendChild(btn);
