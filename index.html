@@ -20,6 +20,7 @@
 
       <div id="hud" class="hud hidden" aria-live="polite">
         <div class="hud-top">
+          <span id="world-label">Aurora Run</span>
           <span id="attempt">Attempt 1</span>
           <span id="progress">0%</span>
         </div>
@@ -31,13 +32,13 @@
       <div id="menu" class="overlay">
         <div class="menu-panel">
           <p class="brand">NEON DASH</p>
-          <h1>Salta. Sopravvivi. Ripeti.</h1>
+          <h1>Scegli un mondo. Segui il ritmo.</h1>
           <p class="tagline">
-            Un clone ritmico in stile Geometry Dash: il cubo corre da solo, tu decidi quando saltare.
+            Dieci corsi a difficoltà crescente: il cubo corre da solo, tu salti a tempo con la musica.
           </p>
+          <div id="world-grid" class="world-grid" role="listbox" aria-label="Selezione mondo"></div>
           <div class="cta-row">
             <button id="btn-play" class="btn primary" type="button">Gioca</button>
-            <button id="btn-practice" class="btn ghost" type="button">Practice</button>
           </div>
           <p class="hint">Spazio / Click / Tocco per saltare · Esc per pausa</p>
         </div>
@@ -58,10 +59,11 @@
       <div id="complete" class="overlay hidden">
         <div class="menu-panel compact">
           <p class="brand small">NEON DASH</p>
-          <h2>Livello completato!</h2>
+          <h2>Mondo completato!</h2>
           <p id="complete-stats" class="tagline"></p>
           <div class="cta-row">
-            <button id="btn-again" class="btn primary" type="button">Ancora</button>
+            <button id="btn-next" class="btn primary hidden" type="button">Mondo successivo</button>
+            <button id="btn-again" class="btn ghost" type="button">Ancora</button>
             <button id="btn-complete-menu" class="btn ghost" type="button">Menu</button>
           </div>
         </div>
