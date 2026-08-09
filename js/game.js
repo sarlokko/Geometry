@@ -1,6 +1,6 @@
-import { CONFIG } from "./config.js?v=20260809f";
-import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809f";
-import { AudioBus } from "./audio.js?v=20260809f";
+import { CONFIG } from "./config.js?v=20260809g";
+import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809g";
+import { AudioBus } from "./audio.js?v=20260809g";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_BEST_PREFIX = "neon-dash-best-w";
@@ -150,7 +150,7 @@ export class Game {
         vy = 0;
       } else {
         // Yellow-orb ball starts mid-arc toward the first orb
-        y = CONFIG.GROUND_Y - 170;
+        y = CONFIG.GROUND_Y - 160;
         vy = CONFIG.BALL_BOUNCE;
       }
     }
@@ -243,7 +243,22 @@ export class Game {
         }
         return false;
       }
-      // Yellow-orb ball: no free boost — you must hit the yellow orbs
+      // Yellow-orb ball: tap while falling near an orb (one tap per orb)
+      const orb = this.findTouching("orb");
+      if (orb && p.vy > -80) {
+        const dir = orb.dir || 1;
+        // Reset to a consistent bounce arc so spacing stays readable
+        p.y = CONFIG.GROUND_Y - 160;
+        p.vy = CONFIG.BALL_BOUNCE * dir;
+        p.onGround = false;
+        orb._used = true;
+        this.orbBuffer = false;
+        this.jumpBuffer = 0;
+        this._padLock = 0.1;
+        this.audio.orb();
+        this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 16, this.colors.orb);
+        return true;
+      }
       return false;
     }
 
@@ -275,10 +290,25 @@ export class Game {
   }
 
   findTouching(type) {
-    const box = inflate(this.playerWorldBox(), 10);
+    const pbox = this.playerWorldBox();
     for (const o of this.level.objects) {
       if (o.type !== type || o._used) continue;
-      if (aabb(box, o)) return o;
+      if (
+        type === "orb" &&
+        this.player?.mode === "ball" &&
+        this.player?.ballKind !== "walls"
+      ) {
+        // Tall catch column: tap when above the yellow orb, not only on contact
+        const column = {
+          x: o.x - 14,
+          y: o.y - 130,
+          w: o.w + 28,
+          h: o.h + 150,
+        };
+        if (aabb(pbox, column)) return o;
+      } else if (aabb(inflate(pbox, type === "orb" ? 14 : 10), o)) {
+        return o;
+      }
     }
     return null;
   }
@@ -596,28 +626,6 @@ export class Game {
         }
       }
 
-      // Yellow orbs: mandatory bounce points for the pad-ball
-      if (
-        o.type === "orb" &&
-        p.mode === "ball" &&
-        (p.ballKind || this.level?.world?.ballKind || "pads") !== "walls" &&
-        this._padLock <= 0 &&
-        aabb(box, inflate(o, 12))
-      ) {
-        const dir = o.dir || 1;
-        const approaching = dir === 1 ? p.vy >= -20 : p.vy <= 20;
-        if (approaching) {
-          p.vy = CONFIG.BALL_BOUNCE * dir;
-          p.onGround = false;
-          if (dir === 1) p.y = Math.min(p.y, o.y - p.h - 1);
-          else p.y = Math.max(p.y, o.y + o.h + 1);
-          o._used = true;
-          this._padLock = 0.12;
-          this.audio.orb();
-          this.burst(o.x + o.w / 2, o.y + o.h / 2, 16, C.orb);
-        }
-      }
-
       if (o.type === "portal" && aabb(box, o)) {
         if (o.mode === "flip") {
           if (!o._used) {
@@ -678,7 +686,7 @@ export class Game {
       } else {
         // Yellow-orb ball: lift off lethal ground into a clean bounce arc
         // (fixes instant death when entering the portal while standing)
-        p.y = CONFIG.GROUND_Y - 170;
+        p.y = CONFIG.GROUND_Y - 160;
         p.vy = CONFIG.BALL_BOUNCE;
         this._padLock = 0.08;
       }

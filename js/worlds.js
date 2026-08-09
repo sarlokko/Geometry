@@ -1,4 +1,4 @@
-import { CONFIG } from "./config.js?v=20260809f";
+import { CONFIG } from "./config.js?v=20260809g";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
@@ -65,7 +65,7 @@ export const WORLDS = [
     id: 5,
     name: "Pallini",
     subtitle: "Orbs gialle",
-    quirk: "Devi prendere i pallini gialli: senza di loro cadi.",
+    quirk: "Tap su ogni pallino giallo per rimbalzare — senza tap cadi.",
     bpm: 144,
     speed: 400,
     startMode: "ball",
@@ -97,7 +97,7 @@ export const WORLDS = [
     id: 8,
     name: "Rimbalzi",
     subtitle: "Muri · Pallini · Cubo",
-    quirk: "Rimbalzo sui muri e poi i pallini gialli obbligatori.",
+    quirk: "Flip sui muri a ritmo, poi tap su ogni pallino giallo per rimbalzare.",
     bpm: 158,
     speed: 430,
     startMode: "ball",
@@ -395,31 +395,27 @@ function buildWallBall(objects) {
  * Hang ≈ 0.85s × 400 ≈ 340px; low yellow orbs are the only bounce points.
  */
 function buildYellowOrbs(objects) {
-  // First landing ≈ PLAYER_X + speed * 0.96 ≈ 660; then ~335px per bounce
-  const gap = 335;
-  const count = 28;
-  const orbs = [630];
-  let x = 630 + gap;
-  for (let i = 0; i < count; i++) {
+  // Tap-to-bounce while falling — rhythmic gaps, no AFK
+  const speed = 400;
+  const beat = Math.round(speed * 0.88);
+  let x = 640;
+  const gaps = [];
+  for (let i = 0; i < 28; i++) {
+    const accent = i % 4 === 2 ? -22 : i % 5 === 0 ? 24 : 0;
+    gaps.push(beat + accent);
+  }
+  const orbs = [];
+  for (let i = 0; i < gaps.length; i++) {
     orbs.push(x);
-    x += gap;
+    x += gaps[i];
   }
-  const end = x + 200;
+  const end = x + 220;
 
-  const covers = orbs.map((ox) => [ox - 50, ox + 70]);
-  for (let sx = 420; sx < end; sx += 52) {
-    if (!covers.some(([a, b]) => sx > a && sx < b)) addSpike(objects, sx);
+  // Miss a tap → lethal ground. No spike carpet under the arc.
+  for (const ox of orbs) addOrb(objects, ox, G - 44, 44);
+  for (let i = 0; i < orbs.length; i += 4) {
+    addBlock(objects, orbs[i] + 90, 90, S * 1.5, S);
   }
-
-  for (const ox of orbs) {
-    // Sit just above the floor so the bounce arc must hit them
-    addOrb(objects, ox, G - 44, 44);
-  }
-
-  // Decor only — above the bounce apex
-  addBlock(objects, 2800, 90, S * 2, S);
-  addBlock(objects, 5200, 100, S * 2, S);
-  addBlock(objects, 7800, 85, S * 2, S);
 
   return end;
 }
@@ -511,69 +507,118 @@ function buildMixRift(objects) {
   return 13100;
 }
 
-/** 8 — Wall ball + yellow orbs + cube */
+/** 8 — Wall ball + yellow orbs + cube (active inputs throughout) */
 function buildMixBounce(objects) {
-  // Wall-ball opener — dense flips early (was too sparse/easy)
-  addSpike(objects, 700);
-  addSpike(objects, 820);
-  addSpike(objects, 940);
-  for (let sx = 1100; sx < 1900; sx += 58) addSpike(objects, sx);
-  addBlock(objects, 1980, C, S * 2, S);
-  addSpikeCeil(objects, 1980 + S * 2 + 40);
-  addSpikeCeil(objects, 2200);
-  addSpikeCeil(objects, 2350);
-  for (let sx = 2500; sx < 3300; sx += 58) addSpikeCeil(objects, sx);
-  addSpike(objects, 3500);
-  addSpike(objects, 3650);
-  addBlock(objects, 3850, G - S * 2, S * 2, S);
-  addSpike(objects, 3850 + S * 2 + 50);
-  for (let sx = 4200; sx < 5000; sx += 58) addSpike(objects, sx);
-  addBlock(objects, 5100, C, S * 3, S);
-  addSpikeCeil(objects, 5100 + S * 3 + 40);
-  for (let sx = 5400; sx < 6100; sx += 58) addSpikeCeil(objects, sx);
-  addSpike(objects, 6300);
-  addBlock(objects, 6500, G - S, S * 2, S);
-
-  // Switch to yellow orbs — launch arc must hit the first orb (~speed*0.96)
-  const portalX = 7000;
-  addPortal(objects, portalX, "ball", "pads");
   const speed = 430;
-  const gap = Math.round(speed * 0.84); // ~361 at this world's speed
-  let x = portalX + Math.round(speed * 0.96);
+
+  // --- Wall-ball: alternating lethal floors/ceilings, short flip windows ---
+  // Start: tiny calm then immediate floor death carpet
+  addSpike(objects, 520);
+  addSpike(objects, 620);
+  let wx = 720;
+  const wallSegs = [
+    { side: "floor", len: 380 },
+    { side: "ceil", len: 300 },
+    { side: "floor", len: 260 },
+    { side: "ceil", len: 340 },
+    { side: "floor", len: 220 },
+    { side: "ceil", len: 280 },
+    { side: "floor", len: 320 },
+    { side: "ceil", len: 240 },
+    { side: "floor", len: 300 },
+    { side: "ceil", len: 360 },
+    { side: "floor", len: 250 },
+    { side: "ceil", len: 300 },
+  ];
+  for (let i = 0; i < wallSegs.length; i++) {
+    const seg = wallSegs[i];
+    const gap = 44; // brief flip window between carpets
+    if (seg.side === "floor") {
+      for (let sx = wx; sx < wx + seg.len; sx += 52) addSpike(objects, sx);
+      // Mid hazard — punish lazy mid-height floats
+      if (i % 3 === 1) addBlock(objects, wx + seg.len * 0.45, 220, S, 120);
+    } else {
+      for (let sx = wx; sx < wx + seg.len; sx += 52) addSpikeCeil(objects, sx);
+      if (i % 3 === 2) addBlock(objects, wx + seg.len * 0.4, 280, S, 110);
+    }
+    wx += seg.len + gap;
+  }
+  // Landing shelf before portal
+  addBlock(objects, wx + 40, G - S, S * 2, S);
+  wx += 200;
+
+  // --- Yellow orbs: TAP each one while falling (no AFK auto-bounce) ---
+  const portalX = wx + 80;
+  addPortal(objects, portalX, "ball", "pads");
+  // Hang before lethal ground from y=G-160 ≈ 0.96s → keep gaps under speed*0.94
+  const beat = Math.round(speed * 0.88);
+  let x = portalX + beat;
+  const gaps = [
+    beat,
+    beat + 20,
+    beat - 25,
+    beat,
+    beat + 28,
+    beat - 18,
+    beat,
+    beat + 22,
+    beat - 30,
+    beat + 15,
+    beat,
+    beat - 20,
+    beat + 25,
+    beat,
+    beat - 15,
+    beat + 18,
+  ];
   const orbs = [];
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < gaps.length; i++) {
     orbs.push(x);
-    x += gap;
+    x += gaps[i];
   }
-  const covers = orbs.map((ox) => [ox - 48, ox + 68]);
-  // Spikes right after the portal — no safe floor walk
-  for (let sx = portalX + 50; sx < x; sx += 48) {
-    if (!covers.some(([a, b]) => sx > a && sx < b)) addSpike(objects, sx);
-  }
+  // Lethal ground is the punishment — spikes only as sparse deco above the arc
   for (const ox of orbs) addOrb(objects, ox, G - 44, 44);
+  for (let i = 0; i < orbs.length; i += 3) {
+    addBlock(objects, orbs[i] + 80, 90, S, S);
+  }
 
-  addPortal(objects, x + 80, "cube");
-  addSpike(objects, x + 380);
-  addSpike(objects, x + 520);
-  addSpike(objects, x + 680);
-  addBlock(objects, x + 900, G - S, S * 2, S);
-  addSpike(objects, x + 900 + S * 2 + 60);
-  addBlock(objects, x + 1200, G - S, S * 2, S);
-  addBlock(objects, x + 1200 + S * 2, G - S * 2, S * 2, S);
+  // --- Cube burst ---
+  addPortal(objects, x + 60, "cube");
+  addSpike(objects, x + 320);
+  addSpike(objects, x + 450);
+  addSpike(objects, x + 560);
+  addBlock(objects, x + 780, G - S, S * 2, S);
+  addSpike(objects, x + 780 + S * 2 + 55);
+  addSpike(objects, x + 1100);
+  addBlock(objects, x + 1280, G - S, S * 2, S);
+  addBlock(objects, x + 1280 + S * 2, G - S * 2, S * 2, S);
 
-  addPortal(objects, x + 1700, "ball", "walls");
-  for (let sx = x + 1950; sx < x + 2750; sx += 58) addSpike(objects, sx);
-  addBlock(objects, x + 2850, C, S * 3, S);
-  addSpikeCeil(objects, x + 2850 + S * 3 + 40);
-  for (let sx = x + 3100; sx < x + 3800; sx += 58) addSpikeCeil(objects, sx);
-  addSpike(objects, x + 4000);
-  addSpike(objects, x + 4180);
+  // --- Wall-ball reprise: faster flip cadence ---
+  addPortal(objects, x + 1750, "ball", "walls");
+  let wx2 = x + 2000;
+  const reprise = [
+    { side: "floor", len: 280 },
+    { side: "ceil", len: 240 },
+    { side: "floor", len: 200 },
+    { side: "ceil", len: 260 },
+    { side: "floor", len: 220 },
+    { side: "ceil", len: 300 },
+  ];
+  for (const seg of reprise) {
+    if (seg.side === "floor") {
+      for (let sx = wx2; sx < wx2 + seg.len; sx += 50) addSpike(objects, sx);
+    } else {
+      for (let sx = wx2; sx < wx2 + seg.len; sx += 50) addSpikeCeil(objects, sx);
+    }
+    wx2 += seg.len + 40;
+  }
 
-  addPortal(objects, x + 4400, "cube");
-  addSpike(objects, x + 4700);
-  addSpike(objects, x + 4900);
-  addBlock(objects, x + 5200, G - S, S * 5, S);
-  return x + 5800;
+  addPortal(objects, wx2 + 80, "cube");
+  addSpike(objects, wx2 + 360);
+  addSpike(objects, wx2 + 500);
+  addSpike(objects, wx2 + 620);
+  addBlock(objects, wx2 + 860, G - S, S * 5, S);
+  return wx2 + 1400;
 }
 
 /** 9 — Tutti i poteri */
@@ -609,25 +654,32 @@ function buildApex(objects) {
   addBlock(objects, 7600, G - 180, S + 8, 180);
   addBlock(objects, 7600, C, S, 100);
 
-  // Wall ball
+  // Wall ball — short flip cadence
   addPortal(objects, 8200, "ball", "walls");
-  addSpike(objects, 8500);
-  for (let sx = 8800; sx < 9600; sx += 70) addSpike(objects, sx);
-  addBlock(objects, 9700, C, S * 3, S);
-  addSpikeCeil(objects, 9700 + S * 3 + 50);
+  let ax = 8500;
+  for (const seg of [
+    { side: "floor", len: 280 },
+    { side: "ceil", len: 240 },
+    { side: "floor", len: 220 },
+    { side: "ceil", len: 260 },
+  ]) {
+    if (seg.side === "floor") {
+      for (let sx = ax; sx < ax + seg.len; sx += 52) addSpike(objects, sx);
+    } else {
+      for (let sx = ax; sx < ax + seg.len; sx += 52) addSpikeCeil(objects, sx);
+    }
+    ax += seg.len + 40;
+  }
 
-  // Yellow orbs
-  addPortal(objects, 10300, "ball", "pads");
-  const gap = 335;
-  let x = 10800;
+  // Yellow orbs — tap each one
+  addPortal(objects, ax + 80, "ball", "pads");
+  const speed = 520;
+  const beat = Math.round(speed * 0.88);
+  let x = ax + 80 + beat;
   const orbs = [];
   for (let i = 0; i < 8; i++) {
     orbs.push(x);
-    x += gap;
-  }
-  const covers = orbs.map((ox) => [ox - 50, ox + 70]);
-  for (let sx = 10400; sx < x; sx += 52) {
-    if (!covers.some(([a, b]) => sx > a && sx < b)) addSpike(objects, sx);
+    x += beat + (i % 2 === 0 ? -20 : 20);
   }
   for (const ox of orbs) addOrb(objects, ox, G - 44, 44);
 
