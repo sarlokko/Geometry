@@ -14,7 +14,10 @@ export const CONFIG = {
   SHIP_GRAVITY: 1100,
   MAX_FALL: 1300,
   ROTATION_SPEED: 7.5,
-  SPIKE_HITBOX_PAD: -10,
+  // Spike collision uses a triangle matching the art; these insets shrink it
+  // so grazing the empty AABB corners no longer kills you.
+  SPIKE_INSET: 7,
+  SPIKE_PLAYER_PAD: 5,
   COYOTE_TIME: 0.09,
   JUMP_BUFFER: 0.12,
   // Mode-specific

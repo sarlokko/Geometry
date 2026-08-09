@@ -554,7 +554,7 @@ export class Game {
       if (o._used) continue;
       if (!nearCamera(o, this.cameraX)) continue;
 
-      if (o.type === "spike" && aabb(box, inflate(o, CONFIG.SPIKE_HITBOX_PAD))) {
+      if (o.type === "spike" && hitsSpike(box, o)) {
         this.die();
         return;
       }
@@ -1115,6 +1115,114 @@ function aabb(a, b) {
 
 function inflate(o, pad) {
   return { x: o.x + pad, y: o.y + pad, w: o.w - pad * 2, h: o.h - pad * 2 };
+}
+
+/** Triangle hitbox matching drawn spikes, with forgiveness inset. */
+function hitsSpike(playerBox, spike) {
+  const inset = CONFIG.SPIKE_INSET ?? 7;
+  const playerPad = CONFIG.SPIKE_PLAYER_PAD ?? 5;
+  const box = inflate(playerBox, playerPad);
+  if (box.w <= 0 || box.h <= 0) return false;
+
+  // Broad-phase: skip if not even near the spike bounds
+  if (!aabb(box, spike)) return false;
+
+  const x = spike.x;
+  const y = spike.y;
+  const w = spike.w;
+  const h = spike.h;
+  /** @type {{x:number,y:number}[]} */
+  let tri;
+  if ((spike.dir || 1) === 1) {
+    // Floor spike — tip up
+    tri = [
+      { x: x + inset, y: y + h },
+      { x: x + w * 0.5, y: y + inset },
+      { x: x + w - inset, y: y + h },
+    ];
+  } else {
+    // Ceiling spike — tip down
+    tri = [
+      { x: x + inset, y: y },
+      { x: x + w * 0.5, y: y + h - inset },
+      { x: x + w - inset, y: y },
+    ];
+  }
+  return rectIntersectsTriangle(box, tri);
+}
+
+function pointInTriangle(p, a, b, c) {
+  const v0x = c.x - a.x;
+  const v0y = c.y - a.y;
+  const v1x = b.x - a.x;
+  const v1y = b.y - a.y;
+  const v2x = p.x - a.x;
+  const v2y = p.y - a.y;
+  const dot00 = v0x * v0x + v0y * v0y;
+  const dot01 = v0x * v1x + v0y * v1y;
+  const dot02 = v0x * v2x + v0y * v2y;
+  const dot11 = v1x * v1x + v1y * v1y;
+  const dot12 = v1x * v2x + v1y * v2y;
+  const inv = 1 / (dot00 * dot11 - dot01 * dot01);
+  const u = (dot11 * dot02 - dot01 * dot12) * inv;
+  const v = (dot00 * dot12 - dot01 * dot02) * inv;
+  return u >= 0 && v >= 0 && u + v <= 1;
+}
+
+function segmentsIntersect(a, b, c, d) {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const cdx = d.x - c.x;
+  const cdy = d.y - c.y;
+  const den = abx * cdy - aby * cdx;
+  if (Math.abs(den) < 1e-8) return false;
+  const acx = c.x - a.x;
+  const acy = c.y - a.y;
+  const t = (acx * cdy - acy * cdx) / den;
+  const u = (acx * aby - acy * abx) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+function rectIntersectsTriangle(rect, tri) {
+  const corners = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y + rect.h },
+    { x: rect.x, y: rect.y + rect.h },
+  ];
+  // Any player corner inside the spike triangle
+  for (const p of corners) {
+    if (pointInTriangle(p, tri[0], tri[1], tri[2])) return true;
+  }
+  // Any triangle tip inside the player
+  for (const p of tri) {
+    if (
+      p.x >= rect.x &&
+      p.x <= rect.x + rect.w &&
+      p.y >= rect.y &&
+      p.y <= rect.y + rect.h
+    ) {
+      return true;
+    }
+  }
+  // Edge crossings (catches grazing along an edge)
+  const edges = [
+    [corners[0], corners[1]],
+    [corners[1], corners[2]],
+    [corners[2], corners[3]],
+    [corners[3], corners[0]],
+  ];
+  const tEdges = [
+    [tri[0], tri[1]],
+    [tri[1], tri[2]],
+    [tri[2], tri[0]],
+  ];
+  for (const [a, b] of edges) {
+    for (const [c, d] of tEdges) {
+      if (segmentsIntersect(a, b, c, d)) return true;
+    }
+  }
+  return false;
 }
 
 function nearCamera(o, cam, pad = 80) {
