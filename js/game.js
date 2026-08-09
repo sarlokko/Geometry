@@ -1,12 +1,12 @@
-import { CONFIG } from "./config.js?v=20260809p";
+import { CONFIG } from "./config.js?v=20260809q";
 import {
   WORLDS,
   createWorldLevel,
   clampWorld,
   clampStage,
   STAGE_COUNT,
-} from "./worlds.js?v=20260809p";
-import { AudioBus } from "./audio.js?v=20260809p";
+} from "./worlds.js?v=20260809q";
+import { AudioBus } from "./audio.js?v=20260809q";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
@@ -310,9 +310,11 @@ export class Game {
         return false;
       }
       const orb = this.findTouching("orb");
-      if (orb && p.vy > -80) {
+      // Allow tap while falling or near apex — bounce from the orb itself
+      // (old code teleported to a fixed Y, which made height paths meaningless).
+      if (orb && p.vy > -420) {
         const dir = orb.dir || 1;
-        p.y = CONFIG.GROUND_Y - 160;
+        p.y = orb.y + (orb.h - p.h) / 2;
         p.vy = CONFIG.BALL_BOUNCE * dir;
         p.onGround = false;
         orb._used = true;
@@ -362,13 +364,14 @@ export class Game {
         this.player?.mode === "ball" &&
         this.player?.ballKind !== "walls"
       ) {
-        const column = {
-          x: o.x - 14,
-          y: o.y - 130,
-          w: o.w + 28,
+        // Tall enough to tap on the way down toward the orb, not a full column.
+        const pad = {
+          x: o.x - 22,
+          y: o.y - 110,
+          w: o.w + 44,
           h: o.h + 150,
         };
-        if (aabb(pbox, column)) return o;
+        if (aabb(pbox, pad)) return o;
       } else if (aabb(inflate(pbox, type === "orb" ? 14 : 10), o)) {
         return o;
       }
