@@ -2,7 +2,6 @@ import { CONFIG } from "./config.js";
 import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js";
 import { AudioBus } from "./audio.js";
 
-const STORAGE_ATTEMPTS = "neon-dash-attempts";
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_BEST_PREFIX = "neon-dash-best-w";
 
@@ -21,7 +20,7 @@ export class Game {
 
     this.state = "menu";
     this.worldId = 0;
-    this.attempt = Number(localStorage.getItem(STORAGE_ATTEMPTS) || 0);
+    this.attempt = 0;
     this.unlocked = Number(localStorage.getItem(STORAGE_UNLOCK) || 0);
     if (!Number.isFinite(this.unlocked)) this.unlocked = 0;
     this.unlocked = clampWorld(this.unlocked);
@@ -94,8 +93,8 @@ export class Game {
     this.worldId = clampWorld(worldId);
     if (this.worldId > this.unlocked) this.worldId = this.unlocked;
 
-    this.attempt += 1;
-    localStorage.setItem(STORAGE_ATTEMPTS, String(this.attempt));
+    // Fresh counter for every run / every level
+    this.attempt = 1;
     this.level = createWorldLevel(this.worldId);
     this.colors = { ...this.level.world.colors };
     this.best = this.loadBest(this.worldId);
@@ -662,7 +661,6 @@ export class Game {
     setTimeout(() => {
       if (this.state !== "dead") return;
       this.attempt += 1;
-      localStorage.setItem(STORAGE_ATTEMPTS, String(this.attempt));
       this.level = createWorldLevel(this.worldId);
       this.colors = { ...this.level.world.colors };
       this.resetPlayer(false);
