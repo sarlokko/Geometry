@@ -17,6 +17,8 @@ export class AudioBus {
     /** @type {Promise<void> | null} */
     this._resuming = null;
     this._unlockBound = false;
+    // Listen from boot so the first tap/key unlocks audio on mobile.
+    this._bindUnlockHandlers();
   }
 
   /**
