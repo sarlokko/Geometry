@@ -177,336 +177,469 @@ export function clampWorld(id) {
   return Math.max(0, Math.min(WORLDS.length - 1, Math.floor(n)));
 }
 
-/** 0 — Solo cubo: spike e blocchi semplici (~35s) */
+/**
+ * Hand-authored courses: long, but each stretch uses a different idea
+ * instead of looping the same motif.
+ */
+
+/** 0 — Solo cubo */
 function buildAurora(objects) {
-  let x = 1000;
-  // Warm-up singles
-  for (let i = 0; i < 6; i++) {
-    addSpike(objects, x);
-    x += 420 + (i % 3) * 40;
-  }
-  // Platform islands
-  for (let i = 0; i < 4; i++) {
-    addBlock(objects, x, G - S, S * (3 + (i % 2)), S);
-    addSpike(objects, x + S * 3 + 90);
-    x += S * 4 + 380;
-    addSpike(objects, x);
-    x += 350;
-  }
-  // Double spike packs
-  for (let i = 0; i < 5; i++) {
-    addSpike(objects, x);
-    addSpike(objects, x + 160);
-    x += 480;
-  }
-  // Stairs + landing
-  addBlock(objects, x, G - S, S * 2, S);
-  addBlock(objects, x + S * 2, G - S * 2, S * 2, S * 2);
-  x += S * 4 + 100;
-  addSpike(objects, x);
-  x += 320;
-  addSpike(objects, x);
-  x += 280;
-  addBlock(objects, x, G - S, S * 5, S);
-  x += S * 5 + 200;
-  for (let i = 0; i < 4; i++) {
-    addSpike(objects, x);
-    x += 300 + i * 20;
-  }
-  addBlock(objects, x, G - S, S * 6, S);
-  return x + S * 6 + 350;
+  // A: open singles
+  addSpike(objects, 1100);
+  addSpike(objects, 1550);
+  addSpike(objects, 2100);
+  // B: low ledge then spike
+  addBlock(objects, 2500, G - S, S * 4, S);
+  addSpike(objects, 2500 + S * 4 + 100);
+  // C: two-step stair
+  addBlock(objects, 3100, G - S, S * 2, S);
+  addBlock(objects, 3100 + S * 2, G - S * 2, S * 2, S * 2);
+  addSpike(objects, 3100 + S * 4 + 80);
+  // D: triple with widening gaps
+  addSpike(objects, 3700);
+  addSpike(objects, 3950);
+  addSpike(objects, 4300);
+  // E: wide plateau
+  addBlock(objects, 4700, G - S, S * 7, S);
+  addSpike(objects, 4700 + S * 7 + 90);
+  // F: staggered doubles
+  addSpike(objects, 5400);
+  addSpike(objects, 5560);
+  addSpike(objects, 6000);
+  addSpike(objects, 6140);
+  // G: tall stair climb
+  addBlock(objects, 6600, G - S, S * 2, S);
+  addBlock(objects, 6600 + S * 2, G - S * 2, S * 2, S * 2);
+  addBlock(objects, 6600 + S * 4, G - S * 3, S * 2, S * 3);
+  addSpike(objects, 6600 + S * 6 + 70);
+  // H: late sparse then burst
+  addSpike(objects, 7400);
+  addSpike(objects, 7900);
+  addSpike(objects, 8200);
+  addSpike(objects, 8360);
+  addSpike(objects, 8520);
+  // I: finish runway
+  addBlock(objects, 9000, G - S, S * 6, S);
+  addSpike(objects, 9000 + S * 6 + 110);
+  addBlock(objects, 9800, G - S, S * 8, S);
+  return 10400;
 }
 
-/** 1 — Cubo mini: piattaforme strette (~35s) */
+/** 1 — Cubo mini */
 function buildMicro(objects) {
   const s = S * CONFIG.MINI_SCALE;
-  let x = 900;
-  addSpike(objects, x);
-  x += 280;
-  for (let i = 0; i < 5; i++) {
-    addBlock(objects, x, G - s, s * 2, s);
-    addSpike(objects, x + s * 2 + 45);
-    x += s * 2 + 280;
-    addBlock(objects, x, G - s * 2, s * 2, s);
-    addBlock(objects, x + s * 2 + 60, G - s * 3, s * 2, s);
-    addBlock(objects, x + s * 4 + 120, G - s * 2, s * 2, s);
-    x += s * 6 + 320;
-    addSpike(objects, x);
-    addSpike(objects, x + 140);
-    x += 360;
-  }
-  for (let i = 0; i < 10; i++) {
-    addBlock(objects, x, G - s * (1 + (i % 3)), s * (1 + (i % 2)), s);
-    x += s * 2 + 70 + (i % 2) * 30;
-  }
-  x += 120;
-  for (let i = 0; i < 8; i++) {
-    addSpike(objects, x);
-    x += 200 + (i % 2) * 40;
-  }
-  addBlock(objects, x, G - s * 2, s * 3, s);
-  x += s * 3 + 80;
-  addSpike(objects, x);
-  x += 280;
-  addBlock(objects, x, G - s, s * 4, s);
-  return x + s * 4 + 400;
+  // A: tiny ledge intro
+  addSpike(objects, 900);
+  addBlock(objects, 1200, G - s, s * 2, s);
+  addSpike(objects, 1200 + s * 2 + 50);
+  // B: ascending hops
+  addBlock(objects, 1600, G - s, s * 2, s);
+  addBlock(objects, 1600 + s * 2 + 55, G - s * 2, s * 2, s);
+  addBlock(objects, 1600 + s * 4 + 110, G - s * 3, s * 2, s);
+  addSpike(objects, 1600 + s * 6 + 160);
+  // C: needle pillars
+  addBlock(objects, 2400, G - s, s, s);
+  addBlock(objects, 2400 + s + 50, G - s * 2, s, s);
+  addBlock(objects, 2400 + s * 2 + 100, G - s, s, s);
+  addBlock(objects, 2400 + s * 3 + 160, G - s * 2, s, s);
+  // D: gap island
+  addSpike(objects, 3000);
+  addBlock(objects, 3250, G - s * 2, s * 3, s);
+  addSpike(objects, 3250 + s * 3 + 40);
+  // E: descending terrace
+  addBlock(objects, 3700, G - s * 3, s * 2, s);
+  addBlock(objects, 3700 + s * 2 + 60, G - s * 2, s * 2, s);
+  addBlock(objects, 3700 + s * 4 + 120, G - s, s * 3, s);
+  // F: spike rhythm irregular
+  addSpike(objects, 4300);
+  addSpike(objects, 4480);
+  addSpike(objects, 4800);
+  addSpike(objects, 4920);
+  addSpike(objects, 5200);
+  // G: micro staircase + overhang feel
+  addBlock(objects, 5550, G - s, s, s);
+  addBlock(objects, 5550 + s + 40, G - s * 2, s, s);
+  addBlock(objects, 5550 + s * 2 + 80, G - s * 3, s, s);
+  addBlock(objects, 5550 + s * 3 + 130, G - s * 2, s * 2, s);
+  // H: long thin bridge
+  addBlock(objects, 6200, G - s * 2, s * 8, s);
+  addSpike(objects, 6200 + s * 8 + 45);
+  // I: finale clutter then pad of blocks
+  addSpike(objects, 6900);
+  addSpike(objects, 7050);
+  addBlock(objects, 7300, G - s, s * 2, s);
+  addBlock(objects, 7300 + s * 2 + 70, G - s * 2, s, s);
+  addSpike(objects, 7700);
+  addBlock(objects, 8000, G - s, s * 5, s);
+  addSpike(objects, 8600);
+  addBlock(objects, 8900, G - s, s * 6, s);
+  return 9600;
 }
 
-/** 2 — Solo pad (~35s) */
+/** 2 — Solo pad */
 function buildPads(objects) {
-  let x = 900;
-  addSpike(objects, x);
-  x += 250;
-  for (let i = 0; i < 12; i++) {
-    addPad(objects, x);
-    x += 320;
-    if (i % 2 === 0) {
-      addBlock(objects, x, G - S * (2 + (i % 2)), S * (2 + (i % 2)), S);
-      x += S * 3 + 120;
-      addSpike(objects, x);
-      x += 220;
-    } else {
-      addSpike(objects, x);
-      x += 200;
-      addPad(objects, x);
-      x += 340;
-    }
-  }
-  for (let i = 0; i < 4; i++) {
-    addPad(objects, x);
-    x += 280;
-  }
-  addBlock(objects, x, G - S, S * 5, S);
-  x += S * 5 + 180;
-  addSpike(objects, x);
-  x += 300;
-  addPad(objects, x);
-  x += 360;
-  addBlock(objects, x, G - S * 2, S * 4, S);
-  return x + S * 4 + 400;
+  // A: learn the pad
+  addSpike(objects, 900);
+  addPad(objects, 1200);
+  addBlock(objects, 1550, G - S * 2, S * 4, S);
+  // B: pad over spike field
+  addSpike(objects, 2100);
+  addPad(objects, 2350);
+  addSpike(objects, 2700);
+  addSpike(objects, 2860);
+  // C: double pad chain into high shelf
+  addPad(objects, 3200);
+  addPad(objects, 3500);
+  addBlock(objects, 3850, G - S * 3, S * 3, S);
+  addSpike(objects, 3850 + S * 3 + 50);
+  // D: pad, land, pad from a ledge
+  addBlock(objects, 4400, G - S, S * 3, S);
+  addPad(objects, 4400 + S * 3 + 40);
+  addBlock(objects, 5000, G - S * 2, S * 2, S);
+  // E: late bounce across gap spikes
+  addSpike(objects, 5400);
+  addPad(objects, 5650);
+  addSpike(objects, 6000);
+  addPad(objects, 6250);
+  addBlock(objects, 6650, G - S, S * 3, S);
+  // F: pad into stair landing
+  addPad(objects, 7100);
+  addBlock(objects, 7450, G - S, S * 2, S);
+  addBlock(objects, 7450 + S * 2, G - S * 2, S * 2, S);
+  // G: sparse pads then finish shelf
+  addSpike(objects, 8100);
+  addPad(objects, 8400);
+  addSpike(objects, 8850);
+  addPad(objects, 9150);
+  addBlock(objects, 9600, G - S * 2, S * 5, S);
+  addSpike(objects, 10200);
+  addBlock(objects, 10500, G - S, S * 6, S);
+  return 11100;
 }
 
-/** 3 — Orb chain (~35s) */
+/** 3 — Orb chain */
 function buildOrbs(objects) {
-  let x = 900;
-  addSpike(objects, x);
-  addSpike(objects, x + 180);
-  x += 400;
-  for (let i = 0; i < 12; i++) {
-    addOrb(objects, x, G - S * (2.2 + (i % 3) * 0.35));
-    x += 280;
-    addSpike(objects, x);
-    x += 200;
-    if (i % 2 === 0) {
-      addBlock(objects, x, G - S * (1 + (i % 2)), S * 2, S);
-      x += S * 2 + 160;
-    } else {
-      addSpike(objects, x);
-      x += 180;
-      addOrb(objects, x, G - S * 2.7);
-      x += 300;
-    }
-  }
-  addBlock(objects, x, G - S * 2, S * 3, S);
-  x += S * 3 + 140;
-  addOrb(objects, x, G - S * 2.4);
-  x += 320;
-  addSpike(objects, x);
-  addSpike(objects, x + 150);
-  x += 400;
-  addOrb(objects, x, G - S * 3);
-  x += 340;
-  addBlock(objects, x, G - S, S * 4, S);
-  return x + S * 4 + 400;
+  // A: first orb over one spike
+  addSpike(objects, 950);
+  addOrb(objects, 1200, G - S * 2.3);
+  addBlock(objects, 1550, G - S, S * 3, S);
+  // B: two spikes, higher orb
+  addSpike(objects, 2050);
+  addSpike(objects, 2220);
+  addOrb(objects, 2450, G - S * 2.8);
+  // C: orb into mid platform
+  addSpike(objects, 2850);
+  addOrb(objects, 3100, G - S * 2.4);
+  addBlock(objects, 3450, G - S * 2, S * 3, S);
+  addSpike(objects, 3450 + S * 3 + 55);
+  // D: paired orbs (second higher)
+  addSpike(objects, 4000);
+  addOrb(objects, 4250, G - S * 2.2);
+  addOrb(objects, 4550, G - S * 3.1);
+  addBlock(objects, 4950, G - S, S * 2, S);
+  // E: long approach then late orb
+  addSpike(objects, 5400);
+  addSpike(objects, 5650);
+  addSpike(objects, 5850);
+  addOrb(objects, 6150, G - S * 2.6);
+  addBlock(objects, 6550, G - S * 2, S * 4, S);
+  // F: orb over stairs
+  addSpike(objects, 7200);
+  addOrb(objects, 7450, G - S * 2.5);
+  addBlock(objects, 7800, G - S, S * 2, S);
+  addBlock(objects, 7800 + S * 2, G - S * 2, S * 2, S);
+  // G: climax triple orb arcade
+  addSpike(objects, 8400);
+  addOrb(objects, 8650, G - S * 2.3);
+  addSpike(objects, 8950);
+  addOrb(objects, 9200, G - S * 2.9);
+  addSpike(objects, 9550);
+  addOrb(objects, 9800, G - S * 2.4);
+  addBlock(objects, 10200, G - S, S * 5, S);
+  addSpike(objects, 10800);
+  return 11200;
 }
 
-/** 4 — Full ship corridor (~35s) */
+/** 4 — Astronave: varied altitudes / openings */
 function buildShip(objects) {
-  let x = 900;
-  for (let i = 0; i < 34; i++) {
-    const top = i % 2 === 0;
-    const h = 120 + (i % 4) * 18;
-    if (top) addBlock(objects, x, 70 + (i % 3) * 10, S, h);
-    else addBlock(objects, x, G - h, S, h);
-    x += 300 + (i % 3) * 20;
-  }
-  // tighter finale
-  for (let i = 0; i < 10; i++) {
-    const top = i % 2 === 0;
-    const h = 150 + (i % 2) * 20;
-    if (top) addBlock(objects, x, 80, S, h);
-    else addBlock(objects, x, G - h, S, h);
-    x += 260;
-  }
-  return x + 350;
+  // A: gentle openers
+  addBlock(objects, 1000, 90, S, 110);
+  addBlock(objects, 1400, G - 120, S, 120);
+  // B: high ceiling squeeze
+  addBlock(objects, 1850, 70, S, 180);
+  addBlock(objects, 2200, 70, S, 160);
+  // C: floor teeth
+  addBlock(objects, 2650, G - 160, S, 160);
+  addBlock(objects, 2950, G - 130, S, 130);
+  addBlock(objects, 3250, G - 170, S, 170);
+  // D: wide open breath then tall gate
+  addBlock(objects, 3900, 100, S, 140);
+  addBlock(objects, 3900, G - 100, S, 100);
+  // E: diagonal-ish zig with uneven spacing
+  addBlock(objects, 4400, 80, S, 150);
+  addBlock(objects, 4800, G - 150, S, 150);
+  addBlock(objects, 5100, 90, S, 170);
+  addBlock(objects, 5550, G - 120, S, 120);
+  // F: narrow mid corridor
+  addBlock(objects, 6000, 80, S, 200);
+  addBlock(objects, 6000, G - 90, S, 90);
+  addBlock(objects, 6400, 100, S, 180);
+  addBlock(objects, 6400, G - 110, S, 110);
+  // G: staggered pillars
+  addBlock(objects, 6900, G - 140, S, 140);
+  addBlock(objects, 7200, 85, S, 155);
+  addBlock(objects, 7600, G - 165, S, 165);
+  addBlock(objects, 8000, 75, S, 175);
+  // H: finale slalom
+  addBlock(objects, 8500, G - 130, S, 130);
+  addBlock(objects, 8750, 90, S, 160);
+  addBlock(objects, 9050, G - 150, S, 150);
+  addBlock(objects, 9400, 100, S, 140);
+  addBlock(objects, 9750, G - 170, S, 170);
+  addBlock(objects, 10150, 80, S, 150);
+  return 10600;
 }
 
-/** 5 — Ball: bounce pads, never touch ground (~35s) */
+/** 5 — Pallina: mixed bounce routes */
 function buildBall(objects) {
-  const floorPads = [];
-  const ceilPads = [];
-  let x = 700;
-  for (let i = 0; i < 32; i++) {
-    floorPads.push(x);
-    x += 360 + (i % 3) * 20;
-    if (i % 2 === 0) {
-      ceilPads.push(x - 160);
-    }
-  }
-  const end = x + 200;
+  const floorPads = [
+    720, 1100, 1550, 2100, 2480, 3000, 3450, 4000, 4550, 5100, 5600, 6200, 6800, 7400, 8000, 8600, 9200, 9800,
+  ];
+  // Uneven ceiling pads — not every other floor pad
+  const ceilPads = [1350, 2750, 3750, 4850, 5900, 7100, 8300, 9000];
+  const dodgeBlocks = [
+    [1800, G - S * 3.5, S * 1.2],
+    [3300, G - S * 3.2, S * 1.5],
+    [5300, G - S * 3.8, S],
+    [6500, G - S * 3.1, S * 1.4],
+    [7800, G - S * 3.6, S * 1.2],
+    [9400, G - S * 3.3, S * 1.3],
+  ];
 
+  const end = 10200;
   for (let sx = 600; sx < end; sx += 70) {
     const onPad = floorPads.some((px) => sx > px - 30 && sx < px + S + 40);
     if (!onPad) addSpike(objects, sx);
   }
-
   for (const px of floorPads) addPad(objects, px);
   for (const px of ceilPads) addCeilingPad(objects, px);
-
-  // mid-air dodge blocks
-  addBlock(objects, 2500, G - S * 3.4, S * 1.4, S);
-  addBlock(objects, 4200, G - S * 3.6, S * 1.2, S);
-  addBlock(objects, 6100, G - S * 3.2, S * 1.4, S);
-  addBlock(objects, 8800, G - S * 3.5, S * 1.3, S);
-  addBlock(objects, 11000, G - S * 3.3, S * 1.4, S);
+  for (const [bx, by, bw] of dodgeBlocks) addBlock(objects, bx, by, bw, S);
   return end;
 }
 
-/** 6 — UFO flaps (~35s) */
+/** 6 — UFO: altitude puzzles */
 function buildUfo(objects) {
-  let x = 900;
-  for (let i = 0; i < 8; i++) {
-    addSpike(objects, x);
-    addSpike(objects, x + 180);
-    x += 400;
-    addBlock(objects, x, G - S * (2 + (i % 2)), S * 2, S);
-    x += S * 2 + 200;
-    // ceiling overhang
-    addBlock(objects, x, 80, S * (4 + (i % 2)), 90 + (i % 3) * 10);
-    addSpike(objects, x + S * 2);
-    x += S * 5 + 220;
-    addSpike(objects, x);
-    addSpike(objects, x + 160);
-    addSpike(objects, x + 320);
-    x += 500;
-  }
-  addBlock(objects, x, G - S * 2, S * 3, S);
-  x += S * 3 + 160;
-  addSpike(objects, x);
-  x += 280;
-  addBlock(objects, x, 80, S * 6, 100);
-  return x + S * 6 + 400;
+  // A: ground spikes
+  addSpike(objects, 950);
+  addSpike(objects, 1200);
+  addSpike(objects, 1550);
+  // B: low shelf
+  addBlock(objects, 1900, G - S * 2, S * 3, S);
+  addSpike(objects, 1900 + S * 3 + 60);
+  // C: long ceiling bar — fly under
+  addBlock(objects, 2500, 80, S * 8, 95);
+  addSpike(objects, 2500 + S * 3);
+  addSpike(objects, 2500 + S * 6);
+  // D: rise over a tall block
+  addSpike(objects, 3400);
+  addBlock(objects, 3700, G - S * 3, S * 2, S * 2);
+  // E: sandwich: ceiling + floor hazard
+  addBlock(objects, 4200, 80, S * 5, 110);
+  addSpike(objects, 4350);
+  addSpike(objects, 4550);
+  // F: floating mid platforms to weave
+  addBlock(objects, 5100, G - S * 2.5, S * 2, S);
+  addBlock(objects, 5450, 160, S * 3, S);
+  addSpike(objects, 5800);
+  // G: spike storm low
+  addSpike(objects, 6200);
+  addSpike(objects, 6360);
+  addSpike(objects, 6520);
+  addSpike(objects, 6800);
+  // H: high ceiling cave then drop
+  addBlock(objects, 7200, 70, S * 7, 130);
+  addSpike(objects, 7500);
+  // I: finale shelves
+  addBlock(objects, 8100, G - S * 2, S * 2, S);
+  addSpike(objects, 8450);
+  addBlock(objects, 8750, 90, S * 4, 100);
+  addSpike(objects, 9200);
+  addSpike(objects, 9400);
+  addBlock(objects, 9750, G - S * 2, S * 4, S);
+  return 10400;
 }
 
-/** 7 — Wave zigzag tunnel (~35s) */
+/** 7 — Onda: changing tunnel shapes */
 function buildWave(objects) {
-  let x = 800;
-  for (let i = 0; i < 48; i++) {
-    const top = i % 2 === 0;
-    const h = 140 + (i % 4) * 22;
-    if (top) addBlock(objects, x, C, S + 8, h);
-    else addBlock(objects, x, G - h, S + 8, h);
-    if (top) addBlock(objects, x + 120, G - 90 - (i % 3) * 10, S, 90 + (i % 3) * 10);
-    else addBlock(objects, x + 120, C, S, 90 + (i % 3) * 10);
-    x += 270 + (i % 3) * 15;
-  }
-  return x + 250;
+  let x = 850;
+  // A: soft intro teeth
+  addBlock(objects, x, C, S + 8, 120);
+  addBlock(objects, x + 140, G - 100, S, 100);
+  x = 1300;
+  // B: deep floor bite
+  addBlock(objects, x, G - 200, S + 8, 200);
+  addBlock(objects, x + 160, C, S, 90);
+  x = 1750;
+  // C: high ceiling hang
+  addBlock(objects, x, C, S + 8, 210);
+  addBlock(objects, x + 150, G - 80, S, 80);
+  x = 2200;
+  // D: double gate narrow
+  addBlock(objects, x, C, S, 170);
+  addBlock(objects, x, G - 120, S, 120);
+  x = 2600;
+  addBlock(objects, x, C, S, 150);
+  addBlock(objects, x, G - 140, S, 140);
+  x = 3050;
+  // E: asymmetric zig
+  addBlock(objects, x, C, S + 8, 140);
+  addBlock(objects, x + 200, G - 180, S + 8, 180);
+  addBlock(objects, x + 420, C, S + 8, 190);
+  x = 3800;
+  // F: open then sudden floor wall
+  addBlock(objects, x, G - 90, S, 90);
+  addBlock(objects, x + 280, G - 220, S + 8, 220);
+  addBlock(objects, x + 280, C, S, 80);
+  x = 4500;
+  // G: descending ceiling steps
+  addBlock(objects, x, C, S + 10, 130);
+  addBlock(objects, x + 220, C, S + 10, 170);
+  addBlock(objects, x + 440, C, S + 10, 210);
+  addBlock(objects, x + 200, G - 70, S, 70);
+  addBlock(objects, x + 420, G - 70, S, 70);
+  x = 5300;
+  // H: rising floor steps
+  addBlock(objects, x, G - 120, S + 10, 120);
+  addBlock(objects, x + 230, G - 170, S + 10, 170);
+  addBlock(objects, x + 460, G - 210, S + 10, 210);
+  addBlock(objects, x + 100, C, S, 80);
+  addBlock(objects, x + 340, C, S, 80);
+  x = 6200;
+  // I: staggered pillars uneven gaps
+  addBlock(objects, x, C, S, 160);
+  addBlock(objects, x + 300, G - 150, S, 150);
+  addBlock(objects, x + 520, C, S, 190);
+  addBlock(objects, x + 820, G - 170, S, 170);
+  addBlock(objects, x + 1100, C, S, 140);
+  x = 7800;
+  // J: choke points
+  addBlock(objects, x, C, S, 200);
+  addBlock(objects, x, G - 95, S, 95);
+  addBlock(objects, x + 320, C, S, 100);
+  addBlock(objects, x + 320, G - 200, S, 200);
+  x = 8600;
+  // K: finale wave of mixed heights
+  addBlock(objects, x, C, S + 8, 150);
+  addBlock(objects, x + 250, G - 160, S + 8, 160);
+  addBlock(objects, x + 520, C, S + 8, 180);
+  addBlock(objects, x + 780, G - 140, S + 8, 140);
+  addBlock(objects, x + 1050, C, S, 160);
+  addBlock(objects, x + 1050, G - 120, S, 120);
+  return 10000;
 }
 
-/** 8 — Gravity flip cube (~38s) */
+/** 8 — Gravità: each flip section tells a different joke */
 function buildMirror(objects) {
-  let x = 900;
-  for (let cycle = 0; cycle < 7; cycle++) {
-    addSpike(objects, x);
-    addSpike(objects, x + 180);
-    x += 400;
-    addBlock(objects, x, G - S * (1 + (cycle % 2)), S * 3, S);
-    x += S * 3 + 160;
-    addPortal(objects, x, "flip");
-    x += 320;
-    // inverted section
-    addSpikeCeil(objects, x);
-    addSpikeCeil(objects, x + 180);
-    x += 400;
-    addBlock(objects, x, C, S * 3, S);
-    addSpikeCeil(objects, x + S * 3 + 50);
-    x += S * 4 + 200;
-    addPortal(objects, x, "flip");
-    x += 300;
-  }
-  addSpike(objects, x);
-  addSpike(objects, x + 160);
-  x += 380;
-  addBlock(objects, x, G - S, S * 5, S);
-  return x + S * 5 + 400;
+  // A: normal warm-up
+  addSpike(objects, 900);
+  addSpike(objects, 1200);
+  addBlock(objects, 1550, G - S, S * 3, S);
+  addPortal(objects, 1950, "flip");
+  // B: inverted — ceiling singles
+  addSpikeCeil(objects, 2350);
+  addSpikeCeil(objects, 2700);
+  addBlock(objects, 3100, C, S * 4, S);
+  addPortal(objects, 3600, "flip");
+  // C: normal — stair then flip mid-air vibe
+  addSpike(objects, 4000);
+  addBlock(objects, 4300, G - S, S * 2, S);
+  addBlock(objects, 4300 + S * 2, G - S * 2, S * 2, S);
+  addPortal(objects, 4800, "flip");
+  // D: inverted — dense ceiling spikes + short ledge
+  addSpikeCeil(objects, 5150);
+  addSpikeCeil(objects, 5320);
+  addSpikeCeil(objects, 5490);
+  addBlock(objects, 5800, C, S * 2, S);
+  addSpikeCeil(objects, 5800 + S * 2 + 50);
+  addPortal(objects, 6300, "flip");
+  // E: normal — long quiet then sudden pair
+  addSpike(objects, 6800);
+  addSpike(objects, 7300);
+  addSpike(objects, 7480);
+  addPortal(objects, 7900, "flip");
+  // F: inverted — wide ceiling runway
+  addBlock(objects, 8300, C, S * 6, S);
+  addSpikeCeil(objects, 8300 + S * 6 + 80);
+  addSpikeCeil(objects, 9000);
+  addPortal(objects, 9400, "flip");
+  // G: normal finale
+  addSpike(objects, 9800);
+  addSpike(objects, 10000);
+  addBlock(objects, 10350, G - S, S * 2, S);
+  addSpike(objects, 10350 + S * 2 + 70);
+  addBlock(objects, 10900, G - S, S * 5, S);
+  return 11400;
 }
 
-/** 9 — Mode roulette (~40s) */
+/** 9 — Roulette: each mode segment is a short unique scene */
 function buildApex(objects) {
-  let x = 800;
-  // cube intro
-  for (let i = 0; i < 6; i++) {
-    addSpike(objects, x);
-    x += 200;
-  }
-  addBlock(objects, x, G - S, S * 2, S);
-  x += S * 2 + 180;
+  // Cube cold open
+  addSpike(objects, 850);
+  addSpike(objects, 1150);
+  addBlock(objects, 1500, G - S, S * 3, S);
+  addSpike(objects, 1500 + S * 3 + 80);
+  addSpike(objects, 2050);
+  addBlock(objects, 2350, G - S, S * 2, S);
+  addBlock(objects, 2350 + S * 2, G - S * 2, S * 2, S);
 
-  addPortal(objects, x, "ship");
-  x += 280;
-  for (let i = 0; i < 12; i++) {
-    const top = i % 2 === 0;
-    const h = 130 + (i % 3) * 15;
-    if (top) addBlock(objects, x, 80, S, h);
-    else addBlock(objects, x, G - h, S, h);
-    x += 280;
-  }
+  // Ship — open then squeeze
+  addPortal(objects, 2900, "ship");
+  addBlock(objects, 3250, 90, S, 130);
+  addBlock(objects, 3600, G - 150, S, 150);
+  addBlock(objects, 4000, 80, S, 180);
+  addBlock(objects, 4000, G - 100, S, 100);
+  addBlock(objects, 4450, G - 140, S, 140);
+  addBlock(objects, 4800, 100, S, 160);
 
-  addPortal(objects, x, "ball");
-  x += 200;
-  const ballStart = x;
-  const apexPads = [];
-  for (let i = 0; i < 8; i++) {
-    apexPads.push(x);
-    x += 340;
+  // Ball — bounce path with one ceiling divert
+  addPortal(objects, 5200, "ball");
+  const pads = [5450, 5850, 6300, 6750, 7200];
+  for (let sx = 5300; sx < 7500; sx += 80) {
+    if (!pads.some((px) => sx > px - 30 && sx < px + S + 40)) addSpike(objects, sx);
   }
-  for (let sx = ballStart - 40; sx < x; sx += 80) {
-    if (!apexPads.some((px) => sx > px - 30 && sx < px + S + 40)) addSpike(objects, sx);
-  }
-  for (const px of apexPads) addPad(objects, px);
-  addCeilingPad(objects, apexPads[2] + 160);
-  addCeilingPad(objects, apexPads[4] + 160);
+  for (const px of pads) addPad(objects, px);
+  addCeilingPad(objects, 6550);
+  addBlock(objects, 7000, G - S * 3.4, S * 1.3, S);
 
-  addPortal(objects, x, "ufo");
-  x += 280;
-  for (let i = 0; i < 5; i++) {
-    addSpike(objects, x);
-    addSpike(objects, x + 170);
-    x += 360;
-    if (i % 2 === 0) {
-      addBlock(objects, x, 80, S * 5, 100);
-      x += S * 5 + 160;
-    }
-  }
+  // UFO — under bar then over shelf
+  addPortal(objects, 7600, "ufo");
+  addSpike(objects, 7900);
+  addSpike(objects, 8100);
+  addBlock(objects, 8400, 80, S * 6, 100);
+  addSpike(objects, 8600);
+  addBlock(objects, 9100, G - S * 2.5, S * 2, S);
+  addSpike(objects, 9500);
 
-  addPortal(objects, x, "wave");
-  x += 260;
-  for (let i = 0; i < 10; i++) {
-    const top = i % 2 === 0;
-    const h = 150 + (i % 3) * 18;
-    if (top) addBlock(objects, x, C, S, h);
-    else addBlock(objects, x, G - h, S, h);
-    x += 260;
-  }
+  // Wave — three shape changes only
+  addPortal(objects, 9850, "wave");
+  addBlock(objects, 10150, C, S, 160);
+  addBlock(objects, 10150, G - 110, S, 110);
+  addBlock(objects, 10550, C, S + 8, 200);
+  addBlock(objects, 10550 + 160, G - 90, S, 90);
+  addBlock(objects, 11000, G - 180, S + 8, 180);
+  addBlock(objects, 11000, C, S, 100);
+  addBlock(objects, 11400, C, S, 150);
+  addBlock(objects, 11400, G - 130, S, 130);
 
-  addPortal(objects, x, "cube");
-  x += 280;
-  for (let i = 0; i < 6; i++) {
-    addSpike(objects, x);
-    x += 180 + (i % 2) * 30;
-  }
-  addBlock(objects, x, G - S, S * 5, S);
-  return x + S * 5 + 400;
+  // Cube landing strip
+  addPortal(objects, 11850, "cube");
+  addSpike(objects, 12200);
+  addSpike(objects, 12450);
+  addBlock(objects, 12800, G - S, S * 3, S);
+  addSpike(objects, 12800 + S * 3 + 70);
+  addSpike(objects, 13400);
+  addBlock(objects, 13750, G - S, S * 6, S);
+  return 14400;
 }
 
 function add(objects, o) {
