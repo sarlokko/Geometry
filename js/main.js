@@ -1,5 +1,5 @@
-import { Game } from "./game.js?v=20260809l";
-import { WORLDS, STAGE_COUNT, STAGE_LABELS } from "./worlds.js?v=20260809l";
+import { Game } from "./game.js?v=20260809p";
+import { WORLDS, STAGE_COUNT, STAGE_LABELS } from "./worlds.js?v=20260809p";
 
 const els = {
   menu: document.getElementById("menu"),
@@ -171,6 +171,7 @@ els.btnMusic.addEventListener("click", (e) => {
 
 document.getElementById("btn-play").addEventListener("click", () => play(selectedWorld, selectedStage));
 document.getElementById("btn-resume").addEventListener("click", () => {
+  game.audio.unlock();
   hideOverlays();
   els.hud.classList.remove("hidden");
   game.resume();

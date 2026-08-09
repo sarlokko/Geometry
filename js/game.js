@@ -1,12 +1,12 @@
-import { CONFIG } from "./config.js?v=20260809n";
+import { CONFIG } from "./config.js?v=20260809p";
 import {
   WORLDS,
   createWorldLevel,
   clampWorld,
   clampStage,
   STAGE_COUNT,
-} from "./worlds.js?v=20260809n";
-import { AudioBus } from "./audio.js?v=20260809n";
+} from "./worlds.js?v=20260809p";
+import { AudioBus } from "./audio.js?v=20260809p";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
@@ -33,7 +33,12 @@ export class Game {
     if (!Number.isFinite(this.unlocked)) this.unlocked = 0;
     this.unlocked = clampWorld(this.unlocked);
 
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Fold / hi-DPI phones: full DPR canvas + frequent resize storms will lock the UI.
+    const coarse =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    this._mobile = coarse || "ontouchstart" in window;
+    this.dpr = Math.min(window.devicePixelRatio || 1, this._mobile ? 1.25 : 2);
     this.scale = 1;
 
     this.particles = [];
@@ -53,9 +58,19 @@ export class Game {
     this._shake = 0;
     this._flash = 0;
     this._bgPulse = 0;
+    this._resizeTimer = 0;
+    this._lastCssW = 0;
+    this._lastCssH = 0;
 
-    this._bindResize = () => this.resize();
+    this._bindResize = () => {
+      // Samsung Fold fires resize/visualViewport often — debounce & skip no-ops.
+      clearTimeout(this._resizeTimer);
+      this._resizeTimer = window.setTimeout(() => this.resize(), 120);
+    };
     window.addEventListener("resize", this._bindResize);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", this._bindResize);
+    }
     this.resize();
   }
 
@@ -115,17 +130,27 @@ export class Game {
 
   resize() {
     const { WIDTH, HEIGHT } = CONFIG;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vv = window.visualViewport;
+    const vw = Math.round(vv?.width || window.innerWidth);
+    const vh = Math.round(vv?.height || window.innerHeight);
     this.scale = Math.min(vw / WIDTH, vh / HEIGHT);
-    const cssW = WIDTH * this.scale;
-    const cssH = HEIGHT * this.scale;
-    this.canvas.style.width = `${cssW}px`;
-    this.canvas.style.height = `${cssH}px`;
-    this.canvas.style.left = `${(vw - cssW) / 2}px`;
-    this.canvas.style.top = `${(vh - cssH) / 2}px`;
-    this.canvas.width = Math.floor(WIDTH * this.dpr);
-    this.canvas.height = Math.floor(HEIGHT * this.dpr);
+    const cssW = Math.round(WIDTH * this.scale);
+    const cssH = Math.round(HEIGHT * this.scale);
+    if (cssW !== this._lastCssW || cssH !== this._lastCssH) {
+      this._lastCssW = cssW;
+      this._lastCssH = cssH;
+      this.canvas.style.width = `${cssW}px`;
+      this.canvas.style.height = `${cssH}px`;
+      this.canvas.style.left = `${Math.round((vw - cssW) / 2)}px`;
+      this.canvas.style.top = `${Math.round((vh - cssH) / 2)}px`;
+    }
+    const bufW = Math.floor(WIDTH * this.dpr);
+    const bufH = Math.floor(HEIGHT * this.dpr);
+    // Recreating the canvas buffer clears it and is expensive — only when needed.
+    if (this.canvas.width !== bufW || this.canvas.height !== bufH) {
+      this.canvas.width = bufW;
+      this.canvas.height = bufH;
+    }
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
@@ -444,7 +469,8 @@ export class Game {
     if (this._shake > 0) this._shake = Math.max(0, this._shake - dt * 3);
     if (this._flash > 0) this._flash = Math.max(0, this._flash - dt * 3);
 
-    if (Math.random() < 0.55) {
+    const trailChance = this._mobile ? 0.2 : 0.55;
+    if (Math.random() < trailChance) {
       this.particles.push({
         x: p.x + 4,
         y: p.y + p.h * (0.3 + Math.random() * 0.4),
