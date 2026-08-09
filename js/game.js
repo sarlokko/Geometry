@@ -101,7 +101,12 @@ export class Game {
     this.resetPlayer(false);
     this.state = "playing";
     this.audio.ensure();
-    this.audio.setTrack({ bpm: this.level.world.bpm, worldId: this.worldId });
+    // Restart bed every run so groove starts on beat 1 with this world's BPM
+    this.audio.setTrack({
+      bpm: this.level.world.bpm,
+      worldId: this.worldId,
+      forceRestart: true,
+    });
     this.audio.startBed();
     this.hooks.onHud?.(this.hudPayload());
     this._kickLoop();
@@ -665,7 +670,11 @@ export class Game {
       this.colors = { ...this.level.world.colors };
       this.resetPlayer(false);
       this.state = "playing";
-      this.audio.setTrack({ bpm: this.level.world.bpm, worldId: this.worldId });
+      this.audio.setTrack({
+        bpm: this.level.world.bpm,
+        worldId: this.worldId,
+        forceRestart: true,
+      });
       this.audio.startBed();
       this.hooks.onDeath?.(this.hudPayload());
     }, 700);
