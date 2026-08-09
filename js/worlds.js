@@ -1,8 +1,12 @@
-import { CONFIG } from "./config.js?v=20260809i";
+import { CONFIG } from "./config.js?v=20260809j";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
 const C = CONFIG.CEILING_Y;
+
+/** Each world has 3 stages (I / II / III) with rising difficulty. */
+export const STAGE_COUNT = 3;
+export const STAGE_LABELS = ["I", "II", "III"];
 
 /**
  * 6 single-power worlds + 4 multi-power worlds.
@@ -147,10 +151,21 @@ function theme(skyTop, skyBottom, accent, block, blockEdge) {
 
 /**
  * @param {number} worldId
- * @returns {{ length: number, objects: LevelObject[], world: typeof WORLDS[0] }}
+ * @param {number} [stage]
+ * @returns {{ length: number, objects: LevelObject[], world: typeof WORLDS[0] & { stage: number, stageLabel: string, displayName: string } }}
  */
-export function createWorldLevel(worldId) {
-  const world = WORLDS[clampWorld(worldId)];
+export function createWorldLevel(worldId, stage = 0) {
+  stage = clampStage(stage);
+  const base = WORLDS[clampWorld(worldId)];
+  const world = {
+    ...base,
+    colors: { ...base.colors },
+    speed: Math.round(base.speed * (1 + stage * 0.14)),
+    bpm: base.bpm + stage * 10,
+    stage,
+    stageLabel: STAGE_LABELS[stage],
+    displayName: `${base.name} ${STAGE_LABELS[stage]}`,
+  };
   const builders = [
     buildCube,
     buildShip,
@@ -164,7 +179,8 @@ export function createWorldLevel(worldId) {
     buildApex,
   ];
   const objects = [];
-  const finishX = builders[world.id](objects);
+  const finishX = builders[world.id](objects, stage);
+  densifyHazards(objects, stage);
   add(objects, { type: "finish", x: finishX, y: 80, w: 18, h: G - 80 });
   return {
     length: finishX + 200,
@@ -179,11 +195,51 @@ export function clampWorld(id) {
   return Math.max(0, Math.min(WORLDS.length - 1, Math.floor(n)));
 }
 
+export function clampStage(stage) {
+  const n = Number(stage);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(STAGE_COUNT - 1, Math.floor(n)));
+}
+
+/** Fill large spike gaps on higher stages. */
+function densifyHazards(objects, stage) {
+  if (stage <= 0) return;
+  const minGap = stage === 1 ? 110 : 78;
+  const floor = objects
+    .filter((o) => o.type === "spike" && (o.dir || 1) === 1)
+    .sort((a, b) => a.x - b.x);
+  const ceil = objects
+    .filter((o) => o.type === "spike" && o.dir === -1)
+    .sort((a, b) => a.x - b.x);
+  /** @type {LevelObject[]} */
+  const extras = [];
+  for (const list of [floor, ceil]) {
+    for (let i = 0; i < list.length - 1; i++) {
+      const a = list[i];
+      const b = list[i + 1];
+      const gap = b.x - a.x;
+      if (gap <= minGap) continue;
+      const n = stage >= 2 && gap > minGap * 1.7 ? 2 : 1;
+      for (let k = 1; k <= n; k++) {
+        const x = a.x + (gap * k) / (n + 1);
+        if (a.dir === -1) extras.push({ type: "spike", x, y: C, w: 34, h: 34, dir: -1 });
+        else extras.push({ type: "spike", x, y: G - 34, w: 34, h: 34, dir: 1 });
+      }
+    }
+  }
+  objects.push(...extras);
+}
+
 /** 0 — Cubo base */
-function buildCube(objects) {
+function buildCube(objects, stage = 0) {
   addSpike(objects, 1100);
   addSpike(objects, 1550);
+  if (stage >= 1) addSpike(objects, 1780);
   addSpike(objects, 2100);
+  if (stage >= 2) {
+    addSpike(objects, 2220);
+    addSpike(objects, 2340);
+  }
   addBlock(objects, 2500, G - S, S * 4, S);
   addSpike(objects, 2500 + S * 4 + 100);
   addBlock(objects, 3100, G - S, S * 2, S);
@@ -214,7 +270,7 @@ function buildCube(objects) {
 }
 
 /** 1 — Astronave */
-function buildShip(objects) {
+function buildShip(objects, stage = 0) {
   addBlock(objects, 1000, 90, S, 110);
   addBlock(objects, 1400, G - 120, S, 120);
   addBlock(objects, 1850, 70, S, 180);
@@ -250,7 +306,7 @@ function buildShip(objects) {
 }
 
 /** 2 — Sottosopra */
-function buildMirror(objects) {
+function buildMirror(objects, stage = 0) {
   addSpike(objects, 900);
   addSpike(objects, 1200);
   addBlock(objects, 1550, G - S, S * 3, S);
@@ -292,7 +348,7 @@ function buildMirror(objects) {
 }
 
 /** 3 — Zigzag onda */
-function buildWave(objects) {
+function buildWave(objects, stage = 0) {
   let x = 850;
   addBlock(objects, x, C, S + 8, 120);
   addBlock(objects, x + 140, G - 100, S, 100);
@@ -356,7 +412,7 @@ function buildWave(objects) {
 }
 
 /** 4 — Rimbalzo sui muri (tap = flip gravità) */
-function buildWallBall(objects) {
+function buildWallBall(objects, stage = 0) {
   // Alternating lethal carpets — short flip windows, almost no safe cruise
   addSpike(objects, 480);
   addSpike(objects, 580);
@@ -385,18 +441,22 @@ function buildWallBall(objects) {
   ];
   for (let i = 0; i < segs.length; i++) {
     const seg = segs[i];
-    const gap = i < 4 ? 48 : 36; // tighter flip windows later
+    const len = Math.round(seg.len * (1 - stage * 0.07));
+    const gap = Math.max(20, (i < 4 ? 48 : 36) - stage * 10);
+    const step = Math.max(40, 50 - stage * 4);
     if (seg.side === "floor") {
-      for (let sx = x; sx < x + seg.len; sx += 50) addSpike(objects, sx);
+      for (let sx = x; sx < x + len; sx += step) addSpike(objects, sx);
       // Mid blockers punish floating between flips
-      if (i % 3 === 1) addBlock(objects, x + seg.len * 0.4, 200, S, 140);
-      if (i % 4 === 2) addBlock(objects, x + seg.len * 0.7, 260, S, 100);
+      if (i % 3 === 1 || (stage >= 1 && i % 2 === 0))
+        addBlock(objects, x + len * 0.4, 200, S, 140);
+      if (i % 4 === 2 || stage >= 2) addBlock(objects, x + len * 0.7, 260, S, 100);
     } else {
-      for (let sx = x; sx < x + seg.len; sx += 50) addSpikeCeil(objects, sx);
-      if (i % 3 === 2) addBlock(objects, x + seg.len * 0.35, 300, S, 120);
-      if (i % 5 === 0) addBlock(objects, x + seg.len * 0.65, 240, S, 110);
+      for (let sx = x; sx < x + len; sx += step) addSpikeCeil(objects, sx);
+      if (i % 3 === 2 || (stage >= 1 && i % 2 === 1))
+        addBlock(objects, x + len * 0.35, 300, S, 120);
+      if (i % 5 === 0 || stage >= 2) addBlock(objects, x + len * 0.65, 240, S, 110);
     }
-    x += seg.len + gap;
+    x += len + gap;
   }
   // Fake calm then sudden double switch
   addSpike(objects, x + 40);
@@ -414,15 +474,16 @@ function buildWallBall(objects) {
  * 5 — Pallini gialli obbligatori
  * Hang ≈ 0.85s × 400 ≈ 340px; low yellow orbs are the only bounce points.
  */
-function buildYellowOrbs(objects) {
+function buildYellowOrbs(objects, stage = 0) {
   // Tap-to-bounce while falling — rhythmic gaps, no AFK
-  const speed = 400;
-  const beat = Math.round(speed * 0.88);
+  const speed = Math.round(400 * (1 + stage * 0.14));
+  const beat = Math.round(speed * (0.88 - stage * 0.045));
   let x = 640;
   const gaps = [];
-  for (let i = 0; i < 28; i++) {
-    const accent = i % 4 === 2 ? -22 : i % 5 === 0 ? 24 : 0;
-    gaps.push(beat + accent);
+  const count = 28 + stage * 5;
+  for (let i = 0; i < count; i++) {
+    const accent = i % 4 === 2 ? -22 - stage * 4 : i % 5 === 0 ? 24 - stage * 2 : 0;
+    gaps.push(Math.max(170, beat + accent));
   }
   const orbs = [];
   for (let i = 0; i < gaps.length; i++) {
@@ -441,7 +502,7 @@ function buildYellowOrbs(objects) {
 }
 
 /** 6 — Cubo + nave + flip */
-function buildMixTriple(objects) {
+function buildMixTriple(objects, stage = 0) {
   addSpike(objects, 900);
   addSpike(objects, 1200);
   addBlock(objects, 1550, G - S, S * 3, S);
@@ -481,7 +542,7 @@ function buildMixTriple(objects) {
 }
 
 /** 7 — Nave + zigzag + cubo */
-function buildMixRift(objects) {
+function buildMixRift(objects, stage = 0) {
   addBlock(objects, 1000, 90, S, 120);
   addBlock(objects, 1400, G - 140, S, 140);
   addBlock(objects, 1850, 80, S, 160);
@@ -528,8 +589,8 @@ function buildMixRift(objects) {
 }
 
 /** 8 — Wall ball + yellow orbs + cube (active inputs throughout) */
-function buildMixBounce(objects) {
-  const speed = 430;
+function buildMixBounce(objects, stage = 0) {
+  const speed = Math.round(430 * (1 + stage * 0.14));
 
   // --- Wall-ball: alternating lethal floors/ceilings, short flip windows ---
   // Start: tiny calm then immediate floor death carpet
@@ -571,7 +632,7 @@ function buildMixBounce(objects) {
   const portalX = wx + 80;
   addPortal(objects, portalX, "ball", "pads");
   // Hang before lethal ground from y=G-160 ≈ 0.96s → keep gaps under speed*0.94
-  const beat = Math.round(speed * 0.88);
+  const beat = Math.round(speed * (0.88 - stage * 0.04));
   let x = portalX + beat;
   const gaps = [
     beat,
@@ -642,7 +703,7 @@ function buildMixBounce(objects) {
 }
 
 /** 9 — Tutti i poteri */
-function buildApex(objects) {
+function buildApex(objects, stage = 0) {
   // Cube
   addSpike(objects, 850);
   addSpike(objects, 1150);

@@ -1,2 +1,8 @@
-/** Level helpers — worlds own the course layouts. */
-export { WORLDS, createWorldLevel, clampWorld } from "./worlds.js";
+export {
+  WORLDS,
+  STAGE_COUNT,
+  STAGE_LABELS,
+  createWorldLevel,
+  clampWorld,
+  clampStage,
+} from "./worlds.js";
