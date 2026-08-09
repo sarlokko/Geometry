@@ -428,9 +428,18 @@ export class Game {
     this.progress = clamp(p.worldX / this.level.length, 0, 1);
     if (this.progress > this.best) {
       this.best = this.progress;
-      this.saveBest(this.worldId, this.stage, this.best);
+      // localStorage every frame freezes some Android browsers — throttle.
+      this._bestDirty = true;
     }
-    this.hooks.onHud?.(this.hudPayload());
+    this._hudAcc = (this._hudAcc || 0) + dt;
+    if (this._hudAcc >= 0.1) {
+      this._hudAcc = 0;
+      if (this._bestDirty) {
+        this._bestDirty = false;
+        this.saveBest(this.worldId, this.stage, this.best);
+      }
+      this.hooks.onHud?.(this.hudPayload());
+    }
 
     if (this._shake > 0) this._shake = Math.max(0, this._shake - dt * 3);
     if (this._flash > 0) this._flash = Math.max(0, this._flash - dt * 3);
@@ -745,6 +754,10 @@ export class Game {
     if (this.state !== "playing") return;
     this.state = "dead";
     this.player.alive = false;
+    if (this._bestDirty) {
+      this._bestDirty = false;
+      this.saveBest(this.worldId, this.stage, this.best);
+    }
     this.audio.die();
     this.audio.stopBed();
     this._shake = 0.45;
@@ -778,6 +791,7 @@ export class Game {
     this.state = "complete";
     this.progress = 1;
     this.best = 1;
+    this._bestDirty = false;
     this.saveBest(this.worldId, this.stage, 1);
 
     let unlockNote = "";

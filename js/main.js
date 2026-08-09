@@ -22,13 +22,27 @@ const els = {
 let selectedWorld = 0;
 let selectedStage = 0;
 
+let _hudCache = {};
 const game = new Game(els.canvas, {
   onHud: (data) => {
-    els.attempt.textContent = `Attempt ${data.attempt}`;
-    els.progress.textContent = `${data.progress}%`;
-    els.progressFill.style.width = `${data.progress}%`;
-    els.worldLabel.textContent = data.worldName;
-    if (els.quirk) els.quirk.textContent = data.quirk || "";
+    // Avoid rewriting identical DOM text every tick (jank on Samsung).
+    if (_hudCache.attempt !== data.attempt) {
+      _hudCache.attempt = data.attempt;
+      els.attempt.textContent = `Attempt ${data.attempt}`;
+    }
+    if (_hudCache.progress !== data.progress) {
+      _hudCache.progress = data.progress;
+      els.progress.textContent = `${data.progress}%`;
+      els.progressFill.style.width = `${data.progress}%`;
+    }
+    if (_hudCache.worldName !== data.worldName) {
+      _hudCache.worldName = data.worldName;
+      els.worldLabel.textContent = data.worldName;
+    }
+    if (els.quirk && _hudCache.quirk !== data.quirk) {
+      _hudCache.quirk = data.quirk || "";
+      els.quirk.textContent = data.quirk || "";
+    }
   },
   onPause: () => showOverlay("pause"),
   onComplete: (data) => {

@@ -1,4 +1,4 @@
-/** Web Audio SFX + loud rhythmic music bed synced to each world's BPM. */
+/** Web Audio SFX + rhythmic music bed synced to each world's BPM. */
 export class AudioBus {
   constructor() {
     /** @type {AudioContext | null} */
@@ -16,93 +16,60 @@ export class AudioBus {
     this._bar = 0;
     /** @type {Promise<void> | null} */
     this._resuming = null;
-    this._unlockBound = false;
-    this._primed = false;
-    this._bindUnlockHandlers();
   }
 
-  /** Create AudioContext if needed. Never starts the music bed (avoids re-entry). */
+  /** Create AudioContext if needed. Does not start music. */
   ensure() {
     if (!this.ctx) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return null;
       this.ctx = new Ctx();
-      this.ctx.addEventListener("statechange", () => {
-        if (this.ctx?.state === "running") this._afterRunning();
-      });
     }
     return this.ctx;
   }
 
   /**
-   * Call from a real user gesture (tap/click). Resumes a suspended context
-   * and primes the audio graph — required on Samsung/Android Chrome.
+   * Must be called from a tap/click handler. Unlocks Web Audio on mobile
+   * (Samsung/Android often leave the context suspended until a gesture).
    */
   unlock() {
     const ctx = this.ensure();
     if (!ctx) return Promise.resolve();
-    // resume() must be invoked synchronously inside the gesture call stack
-    const p = this._resume();
-    this._prime();
-    this._afterRunning();
-    return p;
-  }
 
-  _bindUnlockHandlers() {
-    if (this._unlockBound) return;
-    this._unlockBound = true;
-    const kick = () => {
-      this.unlock();
-    };
-    for (const ev of ["pointerdown", "keydown"]) {
-      window.addEventListener(ev, kick, { capture: true, passive: true });
+    // Invoke resume inside the user-gesture stack (do not await first).
+    let p = Promise.resolve();
+    if (ctx.state === "suspended" || ctx.state === "interrupted") {
+      if (!this._resuming) {
+        this._resuming = ctx
+          .resume()
+          .catch(() => {})
+          .then(() => {
+            this._resuming = null;
+            if (this._wantBed && !this.musicMuted && !this._bedPlaying) {
+              this.startBed();
+            }
+          });
+      }
+      p = this._resuming;
     }
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") this.unlock();
-    });
-  }
 
-  _resume() {
-    const ctx = this.ctx;
-    if (!ctx) return Promise.resolve();
-    if (ctx.state === "running") return Promise.resolve();
-    if (ctx.state !== "suspended" && ctx.state !== "interrupted") {
-      return Promise.resolve();
-    }
-    if (this._resuming) return this._resuming;
-    this._resuming = ctx
-      .resume()
-      .catch(() => {})
-      .then(() => {
-        this._resuming = null;
-        this._prime();
-        this._afterRunning();
-      });
-    return this._resuming;
-  }
-
-  /** Silent buffer — helps some mobile browsers fully unlock output. */
-  _prime() {
-    const ctx = this.ctx;
-    if (!ctx || ctx.state !== "running" || this._primed) return;
+    // Silent one-shot helps some mobile browsers open the audio device.
     try {
-      const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.connect(ctx.destination);
-      src.start(0);
-      this._primed = true;
+      if (ctx.state === "running") {
+        const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start(0);
+      }
     } catch {
       /* ignore */
     }
-  }
 
-  _afterRunning() {
-    if (this.ctx?.state !== "running") return;
-    // Only start a bed that was requested while we were still suspended.
-    if (this._wantBed && !this.musicMuted && !this._bedPlaying) {
+    if (ctx.state === "running" && this._wantBed && !this.musicMuted && !this._bedPlaying) {
       this.startBed();
     }
+    return p;
   }
 
   /** @param {{ bpm?: number, worldId?: number, forceRestart?: boolean }} opts */
@@ -112,7 +79,6 @@ export class AudioBus {
     if (opts.bpm) this._bpm = opts.bpm;
     if (opts.worldId != null) this._worldId = opts.worldId;
 
-    // Restart on BPM/world change, or when a run starts so the groove locks to the level
     if (this._bedPlaying && (bpmChanged || worldChanged || opts.forceRestart)) {
       const want = this._wantBed;
       this._haltBed(false);
@@ -145,16 +111,20 @@ export class AudioBus {
   beep(freq, dur = 0.08, type = "square", gain = 0.05) {
     const ctx = this.ensure();
     if (!ctx || this.muted || ctx.state !== "running") return;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type;
-    osc.frequency.value = freq;
-    g.gain.value = gain;
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
-    osc.connect(g);
-    g.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + dur);
+    try {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      g.gain.value = gain;
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + dur);
+    } catch {
+      /* ignore */
+    }
   }
 
   jump() {
@@ -192,20 +162,16 @@ export class AudioBus {
     const ctx = this.ensure();
     if (!ctx || this.musicMuted || this._bedPlaying) return;
     if (ctx.state !== "running") {
-      // Wait for unlock()/resume — do not spin or recurse.
-      this._resume();
+      // Will start from unlock()/resume resolution.
       return;
     }
 
-    // Latch early so unlock handlers / statechange cannot re-enter.
     this._bedPlaying = true;
 
     const master = ctx.createGain();
-    // Loud bed — old value was 0.045 and felt almost silent in-game
     master.gain.value = 0.55;
     master.connect(ctx.destination);
 
-    // Soft limiter-ish compressor: punchy without harsh clipping
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -12;
     comp.knee.value = 18;
@@ -214,7 +180,6 @@ export class AudioBus {
     comp.release.value = 0.22;
     comp.connect(master);
 
-    // Keep music bright so it cuts through
     const filter = ctx.createBiquadFilter();
     filter.type = "lowpass";
     filter.frequency.value = 9000;
@@ -224,8 +189,7 @@ export class AudioBus {
     this._bedNodes = [master, filter, comp];
     this._step = 0;
     this._bar = 0;
-    // Start exactly on the next beat boundary feel
-    this._nextNoteTime = ctx.currentTime + 0.04;
+    this._nextNoteTime = ctx.currentTime + 0.05;
     this._schedule();
   }
 
@@ -238,7 +202,7 @@ export class AudioBus {
   _haltBed(clearWant) {
     if (clearWant) this._wantBed = false;
     this._bedPlaying = false;
-    if (this._scheduler) {
+    if (this._scheduler != null) {
       clearTimeout(this._scheduler);
       this._scheduler = null;
     }
@@ -255,12 +219,24 @@ export class AudioBus {
   _schedule() {
     if (!this._bedPlaying || !this.ctx) return;
     const ctx = this.ctx;
-    const scheduleAhead = 0.25;
-    const secondsPerBeat = 60 / this._bpm;
-    // 16th notes locked to world BPM
+    if (ctx.state !== "running") {
+      // Don't busy-loop while suspended — retry gently.
+      this._scheduler = window.setTimeout(() => this._schedule(), 200);
+      return;
+    }
+
+    const scheduleAhead = 0.2;
+    const secondsPerBeat = 60 / Math.max(60, this._bpm || 120);
     const stepDur = secondsPerBeat / 4;
 
-    while (this._nextNoteTime < ctx.currentTime + scheduleAhead) {
+    // If we fell far behind (tab throttle), skip ahead instead of spawning
+    // hundreds of nodes on the main thread (freezes mobile).
+    if (this._nextNoteTime < ctx.currentTime - 0.3) {
+      this._nextNoteTime = ctx.currentTime + 0.05;
+    }
+
+    let guard = 0;
+    while (this._nextNoteTime < ctx.currentTime + scheduleAhead && guard < 24) {
       this._playStep(this._step, this._nextNoteTime, this._bar);
       this._nextNoteTime += stepDur;
       this._step += 1;
@@ -268,54 +244,58 @@ export class AudioBus {
         this._step = 0;
         this._bar = (this._bar + 1) % 4;
       }
+      guard += 1;
     }
 
-    this._scheduler = window.setTimeout(() => this._schedule(), 20);
+    this._scheduler = window.setTimeout(() => this._schedule(), 50);
   }
 
   _playStep(step, when, bar) {
     const filter = this._bedNodes[1];
     if (!filter || !this.ctx) return;
+    // Skip notes already in the past — scheduling them throws on some engines.
+    if (when < this.ctx.currentTime - 0.02) return;
 
     const pattern = this._patternForWorld(this._worldId, bar);
     const isDownbeat = step % 4 === 0;
     const isBackbeat = step % 4 === 2;
 
-    if (pattern.kick[step]) {
-      this._kick(when, filter, isDownbeat ? 1.35 : 1.0);
-    }
-    if (pattern.snare[step]) {
-      this._snare(when, filter, isBackbeat ? 1.15 : 0.85);
-    }
-    if (pattern.hat[step]) {
-      const open = step === 15 || (pattern.openHat && pattern.openHat[step]);
-      this._hat(when, filter, open ? 0.7 : step % 2 === 0 ? 0.5 : 0.35, open);
-    }
-    if (pattern.bass[step] != null) {
-      this._bass(when, filter, pattern.bass[step], 0.9);
-    }
-    if (pattern.lead[step] != null) {
-      this._lead(when, filter, pattern.lead[step], 0.55);
-    }
-    // Chord stab on downbeats for harder worlds
-    if (pattern.stab && pattern.stab[step] != null) {
-      this._stab(when, filter, pattern.stab[step], 0.38);
+    try {
+      if (pattern.kick[step]) {
+        this._kick(when, filter, isDownbeat ? 1.35 : 1.0);
+      }
+      if (pattern.snare[step]) {
+        this._snare(when, filter, isBackbeat ? 1.15 : 0.85);
+      }
+      if (pattern.hat[step]) {
+        const open = step === 15 || (pattern.openHat && pattern.openHat[step]);
+        this._hat(when, filter, open ? 0.7 : step % 2 === 0 ? 0.5 : 0.35, open);
+      }
+      if (pattern.bass[step] != null) {
+        this._bass(when, filter, pattern.bass[step], 0.9);
+      }
+      if (pattern.lead[step] != null) {
+        this._lead(when, filter, pattern.lead[step], 0.55);
+      }
+      if (pattern.stab && pattern.stab[step] != null) {
+        this._stab(when, filter, pattern.stab[step], 0.38);
+      }
+    } catch {
+      /* ignore per-step audio errors */
     }
   }
 
   _patternForWorld(worldId, bar) {
     const id = Math.max(0, Math.min(9, worldId | 0));
-    // Distinct roots / modes per world so each level has its own track color
     const roots = [98, 110, 116, 123, 130, 138, 146, 155, 164, 174];
     const root = roots[id];
     const third = root * (id % 2 === 0 ? 1.25 : 1.2);
     const fifth = root * 1.5;
     const sixth = root * 1.667;
     const octave = root * 2;
-    const fill = bar === 3; // variation every 4th bar
+    const fill = bar === 3;
 
     const kits = [
-      // 0 Aurora — sparse four-on-floor
       {
         kick: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
         snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
@@ -323,7 +303,6 @@ export class AudioBus {
         bass: [root, null, null, null, fifth, null, null, null, root, null, null, third, null, null, fifth, null],
         lead: [null, null, octave, null, null, null, fifth, null, null, null, octave, null, null, third * 2, null, null],
       },
-      // 1 Micro — offbeat hats
       {
         kick: [1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1],
         snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
@@ -331,7 +310,6 @@ export class AudioBus {
         bass: [root, null, root, null, null, third, null, null, fifth, null, null, root, null, null, third, null],
         lead: [octave, null, null, fifth, null, null, octave, null, null, fifth, null, null, third * 2, null, null, null],
       },
-      // 2 Pads — rolling 16ths intro
       {
         kick: [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0],
         snare: [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0],
@@ -339,7 +317,6 @@ export class AudioBus {
         bass: [root, null, fifth, null, root, null, null, third, fifth, null, root, null, null, sixth, null, null],
         lead: [null, octave, null, octave, null, fifth, null, null, octave, null, null, fifth, null, null, third * 2, null],
       },
-      // 3 Orbs — syncopated
       {
         kick: [1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
         snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0],
@@ -347,7 +324,6 @@ export class AudioBus {
         bass: [root, null, null, third, null, null, fifth, null, null, root, null, fifth, null, third, null, null],
         lead: [null, null, fifth, null, octave, null, null, fifth, null, octave, null, null, third * 2, null, octave, null],
       },
-      // 4 Ship — driving
       {
         kick: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0],
         snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0],
@@ -357,7 +333,6 @@ export class AudioBus {
         lead: [octave, null, fifth, null, octave, null, null, sixth * 2, null, fifth, null, octave, null, null, third * 2, null],
         stab: [root, null, null, null, null, null, null, null, fifth, null, null, null, null, null, null, null],
       },
-      // 5 Ball — bounce feel (kick on ups)
       {
         kick: [1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
         snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0],
@@ -365,7 +340,6 @@ export class AudioBus {
         bass: [root, null, fifth, null, null, root, null, third, fifth, null, null, root, null, fifth, null, null],
         lead: [null, octave, null, null, fifth, null, octave, null, null, third * 2, null, octave, null, null, fifth, null],
       },
-      // 6 UFO — flap pulse
       {
         kick: [1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0],
         snare: [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, fill ? 1 : 0],
@@ -373,7 +347,6 @@ export class AudioBus {
         bass: [root, null, null, root, fifth, null, null, fifth, sixth, null, null, root, fifth, null, third, null],
         lead: [octave, octave, null, fifth, null, null, octave, null, fifth, null, octave, null, null, sixth * 2, null, fifth],
       },
-      // 7 Wave — continuous pressure
       {
         kick: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, fill ? 1 : 0],
         snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
@@ -383,7 +356,6 @@ export class AudioBus {
         lead: [fifth, null, octave, null, fifth, null, octave, null, third * 2, null, octave, null, fifth, null, octave, null],
         stab: [null, null, null, null, root, null, null, null, null, null, null, null, fifth, null, null, null],
       },
-      // 8 Mirror — half-time then double
       {
         kick: bar % 2 === 0
           ? [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]
@@ -394,7 +366,6 @@ export class AudioBus {
         lead: [null, null, octave, null, null, null, fifth, null, null, octave, null, null, sixth * 2, null, null, fifth],
         stab: [root, null, null, null, null, null, null, null, null, null, null, null, fifth, null, null, null],
       },
-      // 9 Apex — densest boss groove
       {
         kick: [1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1],
         snare: [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, fill ? 1 : 0],
@@ -423,7 +394,6 @@ export class AudioBus {
     osc.start(when);
     osc.stop(when + 0.22);
 
-    // click transient
     const click = ctx.createOscillator();
     const cg = ctx.createGain();
     click.type = "square";
