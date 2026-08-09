@@ -134,6 +134,8 @@ function renderWorldGrid() {
 function play(worldId = selectedWorld, stage = selectedStage) {
   selectedWorld = worldId;
   selectedStage = stage;
+  // Unlock Web Audio in the same user-gesture stack (needed on Samsung/Android).
+  game.audio.unlock();
   hideOverlays();
   els.hud.classList.remove("hidden");
   game.start(worldId, stage);
@@ -148,7 +150,7 @@ function syncMusicButton() {
 
 els.btnMusic.addEventListener("click", (e) => {
   e.stopPropagation();
-  game.audio.ensure();
+  game.audio.unlock();
   game.audio.toggleMusic();
   syncMusicButton();
 });

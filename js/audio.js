@@ -14,18 +14,83 @@ export class AudioBus {
     this._scheduler = null;
     this._worldId = 0;
     this._bar = 0;
+    /** @type {Promise<void> | null} */
+    this._resuming = null;
+    this._unlockBound = false;
+    // Listen from boot so the first tap/key unlocks audio on mobile.
+    this._bindUnlockHandlers();
   }
 
+  /**
+   * Create the AudioContext if needed and kick off resume().
+   * On mobile (Samsung/Chrome) the context often starts suspended until a
+   * user gesture — resume is started sync in the gesture stack, then we
+   * actually start the bed once state === "running".
+   */
   ensure() {
     if (!this.ctx) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return null;
       this.ctx = new Ctx();
+      this._bindUnlockHandlers();
     }
-    if (this.ctx.state === "suspended") {
-      this.ctx.resume();
-    }
+    this._resumeIfNeeded();
     return this.ctx;
+  }
+
+  /** Explicit unlock from a tap/click/key — safe to call often. */
+  unlock() {
+    this.ensure();
+    return this._resumeIfNeeded();
+  }
+
+  _bindUnlockHandlers() {
+    if (this._unlockBound) return;
+    this._unlockBound = true;
+    const kick = () => {
+      this.unlock();
+    };
+    // Capture phase so we unlock even if a button stops propagation later.
+    for (const ev of ["pointerdown", "touchstart", "mousedown", "keydown"]) {
+      window.addEventListener(ev, kick, { capture: true, passive: true });
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") this.unlock();
+    });
+  }
+
+  _resumeIfNeeded() {
+    const ctx = this.ctx;
+    if (!ctx) return Promise.resolve();
+    if (ctx.state === "running") {
+      this._onCtxRunning();
+      return Promise.resolve();
+    }
+    if (ctx.state !== "suspended") return Promise.resolve();
+    if (this._resuming) return this._resuming;
+    // Call resume() immediately (keeps user-gesture token on Android).
+    this._resuming = ctx
+      .resume()
+      .catch(() => {
+        /* ignore — next gesture will retry */
+      })
+      .then(() => {
+        this._resuming = null;
+        if (this.ctx?.state === "running") this._onCtxRunning();
+      });
+    return this._resuming;
+  }
+
+  _onCtxRunning() {
+    // Bed may have been requested while suspended — start it now.
+    if (this._wantBed && !this.musicMuted && !this._bedPlaying) {
+      this.startBed();
+      return;
+    }
+    // Or it was "playing" while muted by suspension: resync the clock.
+    if (this._bedPlaying && this.ctx) {
+      this._nextNoteTime = Math.max(this._nextNoteTime, this.ctx.currentTime + 0.04);
+    }
   }
 
   /** @param {{ bpm?: number, worldId?: number, forceRestart?: boolean }} opts */
@@ -114,6 +179,12 @@ export class AudioBus {
     this._wantBed = true;
     const ctx = this.ensure();
     if (!ctx || this.musicMuted || this._bedPlaying) return;
+    // Don't mark playing while suspended — scheduled notes would be dropped
+    // and a later startBed() would no-op. Wait for _onCtxRunning().
+    if (ctx.state !== "running") {
+      this._resumeIfNeeded();
+      return;
+    }
 
     const master = ctx.createGain();
     // Loud bed — old value was 0.045 and felt almost silent in-game
