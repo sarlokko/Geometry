@@ -14,22 +14,27 @@ Apri `http://localhost:8080` nel browser.
 
 | Input | Azione |
 | --- | --- |
-| Spazio / Click / Tocco | Salta / thrust / flap (dipende dal mondo) |
+| Spazio / Click / Tocco | Salta / thrust / flip / zigzag (dipende dal mondo) |
 | Frecce | Seleziona mondo (menu) |
 | Esc | Pausa |
 
-### Mondi (ognuno con una peculiarità)
+### Mondi
 
-1. **Aurora Run** — solo cubo, salti classici  
-2. **Micro Mile** — cubo mini, piattaforme strette  
-3. **Pad Pulse** — rimbalzi sui pad  
-4. **Orb Garden** — orb in aria  
-5. **Ship Harbor** — astronave (hold per salire)  
-6. **Neverland** — pallina: non toccare terra  
-7. **Flap Fields** — UFO a flap  
-8. **Wave Rift** — onda (hold = su, rilascia = giù)  
-9. **Mirror Vault** — gravità invertita  
-10. **Neon Apex** — roulette di tutte le modalità  
+**6 livelli single-power**
+
+1. **Cubo Base** — salti classici  
+2. **Astronave** — hold per salire  
+3. **Sottosopra** — portali che invertano la gravità  
+4. **Zigzag** — onda (hold = su, rilascia = giù)  
+5. **Muri** — pallina: tap per rimbalzare tra suolo e soffitto  
+6. **Pallini** — pallina gialla: devi prendere i pallini gialli per avanzare  
+
+**4 livelli multi-power**
+
+7. **Doppio Varco** — cubo · nave · flip  
+8. **Rift Mix** — nave · zigzag · cubo  
+9. **Rimbalzi** — muri · pallini · cubo  
+10. **Neon Apex** — tutti i poteri  
 
 Completare un mondo sblocca il successivo. Progresso e sblocco restano in `localStorage`.
 
