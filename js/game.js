@@ -1,6 +1,6 @@
-import { CONFIG } from "./config.js?v=20260809c";
-import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809c";
-import { AudioBus } from "./audio.js?v=20260809c";
+import { CONFIG } from "./config.js?v=20260809d";
+import { WORLDS, createWorldLevel, clampWorld } from "./worlds.js?v=20260809d";
+import { AudioBus } from "./audio.js?v=20260809d";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_BEST_PREFIX = "neon-dash-best-w";
@@ -901,20 +901,25 @@ export class Game {
       ctx.stroke();
     } else if (o.type === "portal") {
       const color = portalColor(o.mode, C);
-      const grad = ctx.createLinearGradient(sx, o.y, sx + o.w, o.y + o.h);
+      const grad = ctx.createLinearGradient(sx, o.y, sx + o.w, o.y);
       grad.addColorStop(0, "transparent");
-      grad.addColorStop(0.5, color);
+      grad.addColorStop(0.35, color);
+      grad.addColorStop(0.65, color);
       grad.addColorStop(1, "transparent");
+      ctx.globalAlpha = 0.55;
       ctx.fillStyle = grad;
       ctx.fillRect(sx, o.y, o.w, o.h);
+      ctx.globalAlpha = 1;
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
       ctx.strokeRect(sx, o.y, o.w, o.h);
-      // mode glyph
+      // mode glyph centered on the full-height gate
       ctx.fillStyle = color;
-      ctx.font = "bold 11px Orbitron, sans-serif";
+      ctx.font = "bold 12px Orbitron, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(modeGlyph(o.mode), sx + o.w / 2, o.y - 6);
+      ctx.textBaseline = "middle";
+      ctx.fillText(modeGlyph(o.mode), sx + o.w / 2, o.y + o.h / 2);
+      ctx.textBaseline = "alphabetic";
     } else if (o.type === "finish") {
       const stripe = 14;
       for (let i = 0; i < o.h; i += stripe) {
