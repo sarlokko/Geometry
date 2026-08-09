@@ -12,8 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <link rel="stylesheet" href="css/style.css?v=10c" />
+    <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
     <div id="app">
@@ -21,26 +20,27 @@
 
       <div id="hud" class="hud hidden" aria-live="polite">
         <div class="hud-top">
+          <span id="world-label">Aurora Run</span>
           <span id="attempt">Attempt 1</span>
-          <span id="section">Warm-up · 1/10</span>
           <span id="progress">0%</span>
         </div>
         <div class="progress-track" aria-hidden="true">
           <div id="progress-fill" class="progress-fill"></div>
         </div>
+        <p id="quirk" class="hud-quirk"></p>
       </div>
 
       <div id="menu" class="overlay">
         <div class="menu-panel">
           <p class="brand">NEON DASH</p>
-          <h1>Corsa continua. Checkpoint. Più difficile.</h1>
+          <h1>Scegli un mondo. Ogni mondo, una regola.</h1>
           <p class="tagline">
-            Dieci sezioni in un unico percorso: muori e riparti dall’ultimo checkpoint, con difficoltà e velocità in aumento.
+            Dieci peculiarità diverse: cubo, mini, pad, orb, nave, pallina, UFO, onda, gravità e roulette finale.
           </p>
-          <p class="build-tag">v10c · uscita nave → cubo obbligatorio</p>
+          <div id="world-grid" class="world-grid" role="listbox" aria-label="Selezione mondo"></div>
+          <p id="selected-quirk" class="selected-quirk"></p>
           <div class="cta-row">
             <button id="btn-play" class="btn primary" type="button">Gioca</button>
-            <button id="btn-practice" class="btn ghost" type="button">Practice</button>
           </div>
           <p class="hint">Spazio / Click / Tocco per saltare · Esc per pausa</p>
         </div>
@@ -61,16 +61,17 @@
       <div id="complete" class="overlay hidden">
         <div class="menu-panel compact">
           <p class="brand small">NEON DASH</p>
-          <h2>Corsa completata!</h2>
+          <h2>Mondo completato!</h2>
           <p id="complete-stats" class="tagline"></p>
           <div class="cta-row">
-            <button id="btn-again" class="btn primary" type="button">Ancora</button>
+            <button id="btn-next" class="btn primary hidden" type="button">Mondo successivo</button>
+            <button id="btn-again" class="btn ghost" type="button">Ancora</button>
             <button id="btn-complete-menu" class="btn ghost" type="button">Menu</button>
           </div>
         </div>
       </div>
     </div>
 
-    <script type="module" src="js/main.js?v=10c"></script>
+    <script type="module" src="js/main.js"></script>
   </body>
 </html>
