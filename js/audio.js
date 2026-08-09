@@ -17,31 +17,35 @@ export class AudioBus {
     /** @type {Promise<void> | null} */
     this._resuming = null;
     this._unlockBound = false;
-    // Listen from boot so the first tap/key unlocks audio on mobile.
+    this._primed = false;
     this._bindUnlockHandlers();
   }
 
-  /**
-   * Create the AudioContext if needed and kick off resume().
-   * On mobile (Samsung/Chrome) the context often starts suspended until a
-   * user gesture — resume is started sync in the gesture stack, then we
-   * actually start the bed once state === "running".
-   */
+  /** Create AudioContext if needed. Never starts the music bed (avoids re-entry). */
   ensure() {
     if (!this.ctx) {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return null;
       this.ctx = new Ctx();
-      this._bindUnlockHandlers();
+      this.ctx.addEventListener("statechange", () => {
+        if (this.ctx?.state === "running") this._afterRunning();
+      });
     }
-    this._resumeIfNeeded();
     return this.ctx;
   }
 
-  /** Explicit unlock from a tap/click/key — safe to call often. */
+  /**
+   * Call from a real user gesture (tap/click). Resumes a suspended context
+   * and primes the audio graph — required on Samsung/Android Chrome.
+   */
   unlock() {
-    this.ensure();
-    return this._resumeIfNeeded();
+    const ctx = this.ensure();
+    if (!ctx) return Promise.resolve();
+    // resume() must be invoked synchronously inside the gesture call stack
+    const p = this._resume();
+    this._prime();
+    this._afterRunning();
+    return p;
   }
 
   _bindUnlockHandlers() {
@@ -50,8 +54,7 @@ export class AudioBus {
     const kick = () => {
       this.unlock();
     };
-    // Capture phase so we unlock even if a button stops propagation later.
-    for (const ev of ["pointerdown", "touchstart", "mousedown", "keydown"]) {
+    for (const ev of ["pointerdown", "keydown"]) {
       window.addEventListener(ev, kick, { capture: true, passive: true });
     }
     document.addEventListener("visibilitychange", () => {
@@ -59,37 +62,46 @@ export class AudioBus {
     });
   }
 
-  _resumeIfNeeded() {
+  _resume() {
     const ctx = this.ctx;
     if (!ctx) return Promise.resolve();
-    if (ctx.state === "running") {
-      this._onCtxRunning();
+    if (ctx.state === "running") return Promise.resolve();
+    if (ctx.state !== "suspended" && ctx.state !== "interrupted") {
       return Promise.resolve();
     }
-    if (ctx.state !== "suspended") return Promise.resolve();
     if (this._resuming) return this._resuming;
-    // Call resume() immediately (keeps user-gesture token on Android).
     this._resuming = ctx
       .resume()
-      .catch(() => {
-        /* ignore — next gesture will retry */
-      })
+      .catch(() => {})
       .then(() => {
         this._resuming = null;
-        if (this.ctx?.state === "running") this._onCtxRunning();
+        this._prime();
+        this._afterRunning();
       });
     return this._resuming;
   }
 
-  _onCtxRunning() {
-    // Bed may have been requested while suspended — start it now.
+  /** Silent buffer — helps some mobile browsers fully unlock output. */
+  _prime() {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== "running" || this._primed) return;
+    try {
+      const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+      this._primed = true;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  _afterRunning() {
+    if (this.ctx?.state !== "running") return;
+    // Only start a bed that was requested while we were still suspended.
     if (this._wantBed && !this.musicMuted && !this._bedPlaying) {
       this.startBed();
-      return;
-    }
-    // Or it was "playing" while muted by suspension: resync the clock.
-    if (this._bedPlaying && this.ctx) {
-      this._nextNoteTime = Math.max(this._nextNoteTime, this.ctx.currentTime + 0.04);
     }
   }
 
@@ -132,7 +144,7 @@ export class AudioBus {
 
   beep(freq, dur = 0.08, type = "square", gain = 0.05) {
     const ctx = this.ensure();
-    if (!ctx || this.muted) return;
+    if (!ctx || this.muted || ctx.state !== "running") return;
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
     osc.type = type;
@@ -179,12 +191,14 @@ export class AudioBus {
     this._wantBed = true;
     const ctx = this.ensure();
     if (!ctx || this.musicMuted || this._bedPlaying) return;
-    // Don't mark playing while suspended — scheduled notes would be dropped
-    // and a later startBed() would no-op. Wait for _onCtxRunning().
     if (ctx.state !== "running") {
-      this._resumeIfNeeded();
+      // Wait for unlock()/resume — do not spin or recurse.
+      this._resume();
       return;
     }
+
+    // Latch early so unlock handlers / statechange cannot re-enter.
+    this._bedPlaying = true;
 
     const master = ctx.createGain();
     // Loud bed — old value was 0.045 and felt almost silent in-game
@@ -208,7 +222,6 @@ export class AudioBus {
     filter.connect(comp);
 
     this._bedNodes = [master, filter, comp];
-    this._bedPlaying = true;
     this._step = 0;
     this._bar = 0;
     // Start exactly on the next beat boundary feel
