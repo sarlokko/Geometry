@@ -171,6 +171,7 @@ els.btnMusic.addEventListener("click", (e) => {
 
 document.getElementById("btn-play").addEventListener("click", () => play(selectedWorld, selectedStage));
 document.getElementById("btn-resume").addEventListener("click", () => {
+  game.audio.unlock();
   hideOverlays();
   els.hud.classList.remove("hidden");
   game.resume();
