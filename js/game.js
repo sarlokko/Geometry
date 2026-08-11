@@ -1,12 +1,12 @@
-import { CONFIG } from "./config.js?v=20260811a";
+import { CONFIG } from "./config.js?v=20260811b";
 import {
   WORLDS,
   createWorldLevel,
   clampWorld,
   clampStage,
   STAGE_COUNT,
-} from "./worlds.js?v=20260811a";
-import { AudioBus } from "./audio.js?v=20260811a";
+} from "./worlds.js?v=20260811b";
+import { AudioBus } from "./audio.js?v=20260811b";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
@@ -277,8 +277,10 @@ export class Game {
 
   release() {
     this.held = false;
-    // Click must be held or re-tapped to arm a yellow orb (GD-style).
-    this.orbBuffer = false;
+    // On mobile a tap is press+release before the jump peak. Keep the orb
+    // buffer armed while airborne so that tap can still catch a mid-arc orb.
+    // Cleared on landing (see resolveBounds) or when an orb is consumed.
+    if (this.player?.onGround) this.orbBuffer = false;
   }
 
   tryJump() {
@@ -526,6 +528,8 @@ export class Game {
         p.vy = 0;
         p.onGround = true;
         this.coyote = CONFIG.COYOTE_TIME;
+        // Tap-jump orb buffer expires when you touch down.
+        if (!this.held) this.orbBuffer = false;
         if (p.mode === "cube") {
           p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
         }
@@ -661,6 +665,7 @@ export class Game {
             p.vy = 0;
             p.onGround = true;
             this.coyote = CONFIG.COYOTE_TIME;
+            if (!this.held) this.orbBuffer = false;
             p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
           } else {
             const overlapX =
