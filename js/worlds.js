@@ -1,4 +1,4 @@
-import { CONFIG } from "./config.js?v=20260809q";
+import { CONFIG } from "./config.js?v=20260811a";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
@@ -178,7 +178,7 @@ export function createWorldLevel(worldId, stage = 0) {
   ];
   const objects = [];
   const finishX = builders[world.id](objects, stage);
-  densifyHazards(objects, stage);
+  densifyHazards(objects, stage, world.id);
   add(objects, { type: "finish", x: finishX, y: 80, w: 18, h: G - 80 });
   return {
     length: finishX + 200,
@@ -200,11 +200,18 @@ export function clampStage(stage) {
 }
 
 /** Fill large spike gaps on higher stages. */
-function densifyHazards(objects, stage) {
+function densifyHazards(objects, stage, worldId = -1) {
   if (stage <= 0) return;
+  // Pallini pad/orb spacing is hand-tuned — densify breaks landings.
+  if (worldId === 5) return;
   // Keep densified spikes out of post-portal landing windows (fall/rise ~0.6s).
   const portalXs = objects.filter((o) => o.type === "portal").map((o) => o.x);
+  const padXs = objects.filter((o) => o.type === "pad").map((o) => o.x);
+  const orbXs = objects.filter((o) => o.type === "orb").map((o) => o.x);
   const nearPortal = (x) => portalXs.some((px) => x >= px - 40 && x <= px + 720);
+  // Keep approach + pad flight clear (don't force a jump that sails over the pad).
+  const nearPadFlight = (x) => padXs.some((px) => x >= px - 300 && x <= px + 560);
+  const nearOrb = (x) => orbXs.some((ox) => Math.abs(ox - x) < 200);
   const minGap = stage === 1 ? 520 : 380;
   const floor = objects
     .filter((o) => o.type === "spike" && (o.dir || 1) === 1)
@@ -223,7 +230,7 @@ function densifyHazards(objects, stage) {
       const n = stage >= 2 && gap > minGap * 1.7 ? 2 : 1;
       for (let k = 1; k <= n; k++) {
         const x = a.x + (gap * k) / (n + 1);
-        if (nearPortal(x)) continue;
+        if (nearPortal(x) || nearPadFlight(x) || nearOrb(x)) continue;
         if (a.dir === -1) extras.push({ type: "spike", x, y: C, w: 34, h: 34, dir: -1 });
         else extras.push({ type: "spike", x, y: G - 34, w: 34, h: 34, dir: 1 });
       }
@@ -494,112 +501,113 @@ function buildWallBall(objects, stage = 0) {
 }
 
 /**
- * 5 — Pallini: classic yellow pads + yellow orbs (Geometry Dash style).
- * Pad = auto-bounce on contact. Orb = tap while overlapping for an air boost.
+ * 5 — Pallini: yellow pads (auto) + yellow orbs (tap / hold buffer in air).
+ * Heights tuned to real arcs (not the tip-only window).
+ * Pads only on open ground — never under/on blocks (same-frame clip).
  */
 function buildYellowOrbs(objects, stage = 0) {
-  const tight = stage; // 0/1/2
-  // Jump hang ≈ 0.82s → ~310px at speed 380
-  let x = 700;
+  const tight = stage;
+  const speed = Math.round(380 * (1 + stage * 0.14));
+  const land = Math.round(speed * 0.5);
+  // Jump peak player.y ≈ 318; pad peak ≈ 257.
+  // Place orbs where the body actually sweeps through.
+  const yJump = G - 185; // ≈375 — upper-mid cube jump
+  const yPad = G - 255; // ≈305 — mid yellow-pad arc
+  const yHigh = G - 275; // ≈285 — upper pad / chain
+  let x = 500;
 
-  // Intro: learn the yellow pad
+  // Intro pad: walk on (no hold-jump over it), clear spikes, long runway
+  addPad(objects, x);
+  addSpike(objects, x + 150);
+  addSpike(objects, x + 210);
+  x += Math.round(speed * 1.2) + land;
+
+  // Jump → orb (orb late enough on the arc) over short pit
   addSpike(objects, x);
-  addPad(objects, x + 120);
+  addOrb(objects, x + 170, yJump, 48);
+  addSpike(objects, x + 300);
+  addSpike(objects, x + 360);
+  x += 360 + land;
+
+  // Pad → orb → land with long runway → jump-orb
+  addPad(objects, x);
+  addOrb(objects, x + 180, yPad, 48);
   addSpike(objects, x + 280);
   addSpike(objects, x + 340);
-  x += 520;
-
-  // First orb: jump into it and TAP
+  x += 340 + Math.round(speed * 0.85);
   addSpike(objects, x);
-  addSpike(objects, x + 50);
-  addOrb(objects, x + 110, G - 150, 42);
-  addSpike(objects, x + 200);
-  addSpike(objects, x + 260);
-  x += 420;
+  addOrb(objects, x + 170, yJump, 48);
+  addSpike(objects, x + 300);
+  addSpike(objects, x + 360);
+  x += 360 + land;
 
-  // Pad into orb chain
+  // Pad → orb → ground runway (no shelf — landing short of a block face = death)
   addPad(objects, x);
-  addOrb(objects, x + 180, G - 200, 42);
-  addSpike(objects, x + 260);
-  addSpike(objects, x + 320);
-  addOrb(objects, x + 400, G - 170, 42);
-  addSpike(objects, x + 480);
-  addSpike(objects, x + 540);
-  x += 700;
+  addSpike(objects, x + 150);
+  addSpike(objects, x + 210);
+  const pit = Math.round(speed * (0.95 - tight * 0.04));
+  addOrb(objects, x + Math.round(pit * 0.48), yPad, 48);
+  if (tight >= 1) addOrb(objects, x + Math.round(pit * 0.75), yJump, 44);
+  x += pit + land;
 
-  // Platform shelf + orb over a wider pit
-  addBlock(objects, x, G - S, S * 3, S);
-  addPad(objects, x + S * 3 - 20);
-  const pit = 380 - tight * 40;
-  addOrb(objects, x + S * 3 + pit * 0.35, G - 210, 42);
-  if (tight >= 1) addOrb(objects, x + S * 3 + pit * 0.62, G - 160, 42);
-  addBlock(objects, x + S * 3 + pit, G - S, S * 2, S);
-  x += S * 3 + pit + S * 2 + 160;
+  // Ground pad rhythm
+  addPad(objects, x);
+  addSpike(objects, x + 150);
+  addSpike(objects, x + 210);
+  addOrb(objects, x + 190, yPad, 48);
+  x += Math.round(speed * 1.0);
+  addPad(objects, x);
+  addOrb(objects, x + 180, yPad, 48);
+  addSpike(objects, x + 280);
+  addSpike(objects, x + 340);
+  x += 340 + land;
 
-  // Stairs with pads
-  addBlock(objects, x, G - S, S * 2, S);
-  addPad(objects, x + 20);
-  addBlock(objects, x + 160, G - S * 2, S * 2, S);
-  addPad(objects, x + 180);
-  addBlock(objects, x + 320, G - S * 3, S * 2, S);
-  addOrb(objects, x + 480, G - S * 3 - 90, 42);
-  addSpike(objects, x + 560);
-  addSpike(objects, x + 620);
-  addBlock(objects, x + 720, G - S, S * 3, S);
-  x += 720 + S * 3 + 120;
+  // Spike carpet + orb chain (jump ~160px before first spike → orb at +20 ≈ dx 180)
+  const carpet = 8 + tight * 2;
+  for (let i = 0; i < carpet; i++) addSpike(objects, x + i * 52);
+  addOrb(objects, x + 20, yJump, 48);
+  addOrb(objects, x + 200, yHigh, 48);
+  addOrb(objects, x + 380, yJump, 48);
+  if (tight >= 1) addOrb(objects, x + 540, yPad, 44);
+  x += carpet * 52 + land;
 
-  // Triple orb rhythm over spike carpet
-  for (let i = 0; i < 8 + tight * 2; i++) addSpike(objects, x + i * 48);
-  addOrb(objects, x + 80, G - 160, 42);
-  addOrb(objects, x + 260, G - 210, 42);
-  addOrb(objects, x + 440, G - 170, 42);
-  if (tight >= 1) addOrb(objects, x + 600, G - 200, 42);
-  x += 520 + tight * 160;
+  // Pad → orb over spikes → ground runway
+  addPad(objects, x);
+  addSpike(objects, x + 150);
+  addSpike(objects, x + 210);
+  addOrb(objects, x + 200, yPad, 48);
+  addSpike(objects, x + 340);
+  addSpike(objects, x + 400);
+  x += 400 + Math.round(land * 1.3);
 
-  // Safe beat then fake-out pad into spikes
-  addBlock(objects, x, G - S, S * 4, S);
-  addPad(objects, x + S * 2);
-  addSpike(objects, x + S * 4 + 70);
-  addSpike(objects, x + S * 4 + 130);
-  addOrb(objects, x + S * 4 + 200, G - 190, 42);
-  addSpike(objects, x + S * 4 + 280);
-  addSpike(objects, x + S * 4 + 340);
-  x += S * 4 + 480;
-
-  // High orb into descending pads
-  addBlock(objects, x, G - S, S * 2, S);
-  addPad(objects, x + 10);
-  addOrb(objects, x + 200, G - 260, 42);
-  addOrb(objects, x + 380, G - 200, 42);
-  addBlock(objects, x + 560, G - S * 2, S * 2, S);
-  addPad(objects, x + 580);
-  addBlock(objects, x + 720, G - S, S * 3, S);
-  x += 720 + S * 3 + 100;
-
+  // Final pad → orb
+  addPad(objects, x);
+  addOrb(objects, x + 180, yPad, 48);
+  addSpike(objects, x + 280);
+  addSpike(objects, x + 340);
   if (tight >= 1) {
-    // Stage II+: tighter orb weave
-    for (let i = 0; i < 10; i++) addSpike(objects, x + i * 46);
-    addOrb(objects, x + 70, G - 150, 40);
-    addOrb(objects, x + 220, G - 220, 40);
-    addOrb(objects, x + 370, G - 160, 40);
-    addOrb(objects, x + 520, G - 230, 40);
-    x += 680;
+    // Wait out pad→orb hang (~1s) before the next jump spike
+    x += 340 + Math.round(speed * 1.05);
+    addSpike(objects, x);
+    addOrb(objects, x + 170, yJump, 44);
+    addSpike(objects, x + 300);
+    addSpike(objects, x + 360);
+    x += 360 + Math.round(land * 1.5);
+  } else {
+    x += 340 + land;
   }
 
   if (tight >= 2) {
-    addBlock(objects, x, G - S, S * 2, S);
-    addPad(objects, x + 8);
-    addOrb(objects, x + 170, G - 240, 40);
-    addOrb(objects, x + 320, G - 180, 40);
-    addOrb(objects, x + 470, G - 240, 40);
-    for (let i = 0; i < 6; i++) addSpike(objects, x + 200 + i * 48);
-    addBlock(objects, x + 620, G - S, S * 3, S);
-    x += 820;
+    x += Math.round(speed * 0.45);
+    for (let i = 0; i < 9; i++) addSpike(objects, x + i * 52);
+    addOrb(objects, x + 20, yJump, 44);
+    addOrb(objects, x + 200, yPad, 44);
+    addOrb(objects, x + 380, yHigh, 44);
+    x += 9 * 52 + land;
   }
 
-  // Finish shelf
-  addBlock(objects, x, G - S, S * 6, S);
-  return x + S * 6 + 200;
+  // Open ground to the finish line (a G-S shelf is body-height — walking in = death)
+  return x + Math.round(speed * 1.2);
 }
 
 /** 6 — Cubo + nave + flip */
@@ -729,23 +737,25 @@ function buildMixBounce(objects, stage = 0) {
   addBlock(objects, wx + 40, G - S, S * 2, S);
   wx += 200;
 
-  // --- Yellow pads/orbs (stay cube): tap orbs in the air ---
+  // --- Yellow pads/orbs as cube ---
   addPortal(objects, wx + 80, "cube");
   let x = wx + 200;
+  const yJump = G - 185;
+  const yPad = G - 255;
   addPad(objects, x);
   addSpike(objects, x + 140);
   addSpike(objects, x + 200);
-  addOrb(objects, x + 160, G - 170, 42);
-  addPad(objects, x + 360);
-  addOrb(objects, x + 520, G - 210, 42);
-  addSpike(objects, x + 580);
+  addOrb(objects, x + 180, yPad, 48);
+  addPad(objects, x + 380);
+  addOrb(objects, x + 560, yPad, 48);
   addSpike(objects, x + 640);
-  addOrb(objects, x + 720, G - 160, 42);
-  for (let i = 0; i < 6 + stage; i++) addSpike(objects, x + 800 + i * 48);
-  addOrb(objects, x + 880, G - 200, 42);
-  addOrb(objects, x + 1040, G - 170, 42);
-  addBlock(objects, x + 1200, G - S, S * 3, S);
-  x += 1200 + S * 3;
+  addSpike(objects, x + 700);
+  addOrb(objects, x + 780, yJump, 48);
+  for (let i = 0; i < 6 + stage; i++) addSpike(objects, x + 860 + i * 52);
+  addOrb(objects, x + 1000, yPad, 48);
+  addOrb(objects, x + 1160, yJump, 48);
+  addBlock(objects, x + 1320, G - S, S * 3, S);
+  x += 1320 + S * 3;
 
   // --- Cube burst ---
   addSpike(objects, x + 120);
@@ -838,21 +848,23 @@ function buildApex(objects, stage = 0) {
   // Yellow pads/orbs as cube
   addPortal(objects, ax + 80, "cube");
   let x = ax + 200;
+  const yJump = G - 185;
+  const yPad = G - 255;
   addPad(objects, x);
-  addOrb(objects, x + 160, G - 180, 42);
-  addSpike(objects, x + 220);
+  addOrb(objects, x + 180, yPad, 48);
   addSpike(objects, x + 280);
-  addOrb(objects, x + 360, G - 210, 42);
-  addPad(objects, x + 520);
-  addOrb(objects, x + 680, G - 170, 42);
-  for (let i = 0; i < 5; i++) addSpike(objects, x + 740 + i * 48);
-  addOrb(objects, x + 820, G - 200, 42);
-  addBlock(objects, x + 1000, G - S, S * 4, S);
+  addSpike(objects, x + 340);
+  addOrb(objects, x + 400, yPad, 48);
+  addPad(objects, x + 580);
+  addOrb(objects, x + 760, yJump, 48);
+  for (let i = 0; i < 5; i++) addSpike(objects, x + 820 + i * 52);
+  addOrb(objects, x + 960, yPad, 48);
+  addBlock(objects, x + 1140, G - S, S * 4, S);
 
-  addSpike(objects, x + 1000 + S * 4 + 80);
-  addSpike(objects, x + 1000 + S * 4 + 200);
-  addBlock(objects, x + 1000 + S * 4 + 400, G - S, S * 6, S);
-  return x + 1000 + S * 4 + 700;
+  addSpike(objects, x + 1140 + S * 4 + 80);
+  addSpike(objects, x + 1140 + S * 4 + 200);
+  addBlock(objects, x + 1140 + S * 4 + 400, G - S, S * 6, S);
+  return x + 1140 + S * 4 + 700;
 }
 
 function add(objects, o) {
@@ -872,7 +884,7 @@ function addSpikeCeil(objects, x) {
 }
 
 function addPad(objects, x) {
-  objects.push({ type: "pad", x, y: G - 12, w: S + 8, h: 12, dir: 1 });
+  objects.push({ type: "pad", x, y: G - 14, w: S + 20, h: 14, dir: 1 });
 }
 
 function addOrb(objects, x, y, size = 40) {

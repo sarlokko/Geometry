@@ -1,12 +1,12 @@
-import { CONFIG } from "./config.js?v=20260809q";
+import { CONFIG } from "./config.js?v=20260811a";
 import {
   WORLDS,
   createWorldLevel,
   clampWorld,
   clampStage,
   STAGE_COUNT,
-} from "./worlds.js?v=20260809q";
-import { AudioBus } from "./audio.js?v=20260809q";
+} from "./worlds.js?v=20260811a";
+import { AudioBus } from "./audio.js?v=20260811a";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
@@ -277,6 +277,8 @@ export class Game {
 
   release() {
     this.held = false;
+    // Click must be held or re-tapped to arm a yellow orb (GD-style).
+    this.orbBuffer = false;
   }
 
   tryJump() {
@@ -341,6 +343,8 @@ export class Game {
     this._padLock = 0.08;
     this.audio.orb();
     this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, this.colors.orb);
+    // Holding the click keeps orbs armed for the next one in a chain.
+    if (this.held) this.orbBuffer = true;
     return true;
   }
 
@@ -348,10 +352,9 @@ export class Game {
     const pbox = this.playerWorldBox();
     for (const o of this.level.objects) {
       if (o.type !== type || o._used) continue;
-      // Same generous-but-local hitbox for cube and ball orbs
-      if (aabb(inflate(pbox, type === "orb" ? 16 : 10), o)) {
-        return o;
-      }
+      // inflate() insets — use negative pad to grow the player box for orbs.
+      const box = type === "orb" ? inflate(pbox, -18) : inflate(pbox, 10);
+      if (box.w > 0 && box.h > 0 && aabb(box, o)) return o;
     }
     return null;
   }
@@ -422,6 +425,12 @@ export class Game {
       if ((p.mode === "cube" || p.mode === "ufo" || p.mode === "ball") && this.tryJump()) {
         /* consumed */
       }
+    }
+
+    // Yellow orbs: buffer stays armed after jump/pad, but tryJump only runs on
+    // press / ground-hold — poll every frame so overlapping orbs actually fire.
+    if (this.orbBuffer && p.alive && (p.mode === "cube" || p.mode === "ball")) {
+      this.tryOrbBoost();
     }
 
     if (this.held && p.mode === "cube" && (p.onGround || this.coyote > 0)) {
@@ -565,16 +574,40 @@ export class Game {
     const C = this.colors;
     const gDir = p.gravityDir;
 
+    // Pads first — so a yellow pad under/near spikes can launch you before death.
+    let padLaunched = false;
+    if (this._padLock <= 0 && p.mode === "cube") {
+      for (const o of this.level.objects) {
+        if (o.type !== "pad" || o._used) continue;
+        if (!nearCamera(o, this.cameraX)) continue;
+        if (!aabb(box, o)) continue;
+        const dir = o.dir || 1;
+        const approaching = dir === 1 ? p.vy >= -20 : p.vy <= 20;
+        if (!approaching) continue;
+        p.vy = CONFIG.PAD_VELOCITY * dir;
+        p.onGround = false;
+        this._padLock = 0.14;
+        this.orbBuffer = true; // arm orb for the pad launch
+        this.audio.pad();
+        this.burst(o.x + o.w / 2, o.y + o.h / 2, 12, C.pad);
+        padLaunched = true;
+        break;
+      }
+    }
+
     for (const o of this.level.objects) {
       if (o._used) continue;
       if (!nearCamera(o, this.cameraX)) continue;
 
       if (o.type === "spike" && hitsSpike(box, o)) {
+        // Pad launch this frame: body still overlaps ground spikes — don't cancel the bounce.
+        if (padLaunched) continue;
         this.die();
         return;
       }
 
       if (o.type === "block") {
+        if (padLaunched) continue;
         const blockBox = { x: box.x + 4, y: box.y, w: box.w - 8, h: box.h };
         if (!aabb(blockBox, o)) continue;
 
@@ -652,20 +685,6 @@ export class Game {
               this.die();
               return;
             }
-          }
-        }
-      }
-
-      if (o.type === "pad" && this._padLock <= 0) {
-        if (aabb(box, o)) {
-          const dir = o.dir || 1;
-          const approaching = dir === 1 ? p.vy >= -20 : p.vy <= 20;
-          if (approaching && p.mode === "cube") {
-            p.vy = CONFIG.PAD_VELOCITY * dir;
-            p.onGround = false;
-            this._padLock = 0.14;
-            this.audio.pad();
-            this.burst(o.x + o.w / 2, o.y + o.h / 2, 12, C.pad);
           }
         }
       }
