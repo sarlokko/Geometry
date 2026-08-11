@@ -1,4 +1,4 @@
-import { CONFIG } from "./config.js?v=20260811a";
+import { CONFIG } from "./config.js?v=20260811b";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
@@ -69,7 +69,7 @@ export const WORLDS = [
     id: 5,
     name: "Pallini",
     subtitle: "Pad e orb gialle",
-    quirk: "Pad giallo = rimbalzo al tocco. Orb gialla = tap mentre ci passi attraverso.",
+    quirk: "Pad giallo = rimbalzo automatico. Orb gialla = tap (anche il tap del salto conta finché sei in aria).",
     bpm: 144,
     speed: 380,
     startMode: "cube",
@@ -501,56 +501,65 @@ function buildWallBall(objects, stage = 0) {
 }
 
 /**
- * 5 — Pallini: yellow pads (auto) + yellow orbs (tap / hold buffer in air).
- * Heights tuned to real arcs (not the tip-only window).
- * Pads only on open ground — never under/on blocks (same-frame clip).
+ * 5 — Pallini: yellow pads (auto) + yellow orbs (tap while overlapping).
+ * Stage I teaches pad → jump → pad+orb before any orb-gated pits.
  */
 function buildYellowOrbs(objects, stage = 0) {
   const tight = stage;
   const speed = Math.round(380 * (1 + stage * 0.14));
-  const land = Math.round(speed * 0.5);
+  const land = Math.round(speed * 0.55);
   // Jump peak player.y ≈ 318; pad peak ≈ 257.
-  // Place orbs where the body actually sweeps through.
   const yJump = G - 185; // ≈375 — upper-mid cube jump
   const yPad = G - 255; // ≈305 — mid yellow-pad arc
   const yHigh = G - 275; // ≈285 — upper pad / chain
-  let x = 500;
+  let x = 480;
 
-  // Intro pad: walk on (no hold-jump over it), clear spikes, long runway
+  // 1) Intro pad — walk on, auto bounce (no jump needed)
   addPad(objects, x);
   addSpike(objects, x + 150);
   addSpike(objects, x + 210);
-  x += Math.round(speed * 1.2) + land;
+  x += Math.round(speed * 1.25) + land;
 
-  // Jump → orb (orb late enough on the arc) over short pit
+  // 2) Plain jump over a short spike — no orb required
   addSpike(objects, x);
-  addOrb(objects, x + 170, yJump, 48);
+  addSpike(objects, x + 55);
+  x += Math.round(speed * 0.85) + land;
+
+  // 3) Pad → orb (pad arms the buffer; spikes only under the high arc)
+  addPad(objects, x);
+  addOrb(objects, x + 180, yPad, 48);
   addSpike(objects, x + 300);
   addSpike(objects, x + 360);
+  x += 360 + Math.round(speed * 0.7);
+
+  // 4) Jump → orb (tap/hold from the jump; forgiving spacing)
+  addSpike(objects, x);
+  addOrb(objects, x + 160, yJump, 52);
+  if (tight === 0) {
+    // Stage I: one spike after the orb — jump alone almost clears; orb is safety
+    addSpike(objects, x + 340);
+  } else {
+    addSpike(objects, x + 300);
+    addSpike(objects, x + 360);
+  }
   x += 360 + land;
 
-  // Pad → orb → land with long runway → jump-orb
+  // 5) Pad → orb → runway
   addPad(objects, x);
   addOrb(objects, x + 180, yPad, 48);
   addSpike(objects, x + 280);
   addSpike(objects, x + 340);
-  x += 340 + Math.round(speed * 0.85);
+  x += 340 + Math.round(speed * (0.75 + tight * 0.1));
+
+  // 6) Jump → orb pit (harder on II/III)
   addSpike(objects, x);
-  addOrb(objects, x + 170, yJump, 48);
+  addOrb(objects, x + 160, yJump, 48);
   addSpike(objects, x + 300);
   addSpike(objects, x + 360);
-  x += 360 + land;
+  if (tight >= 1) addSpike(objects, x + 420);
+  x += (tight >= 1 ? 420 : 360) + land;
 
-  // Pad → orb → ground runway (no shelf — landing short of a block face = death)
-  addPad(objects, x);
-  addSpike(objects, x + 150);
-  addSpike(objects, x + 210);
-  const pit = Math.round(speed * (0.95 - tight * 0.04));
-  addOrb(objects, x + Math.round(pit * 0.48), yPad, 48);
-  if (tight >= 1) addOrb(objects, x + Math.round(pit * 0.75), yJump, 44);
-  x += pit + land;
-
-  // Ground pad rhythm
+  // 7) Pad rhythm
   addPad(objects, x);
   addSpike(objects, x + 150);
   addSpike(objects, x + 210);
@@ -562,31 +571,30 @@ function buildYellowOrbs(objects, stage = 0) {
   addSpike(objects, x + 340);
   x += 340 + land;
 
-  // Spike carpet + orb chain (jump ~160px before first spike → orb at +20 ≈ dx 180)
-  const carpet = 8 + tight * 2;
+  // 8) Spike carpet + orb chain
+  const carpet = 6 + tight * 2;
   for (let i = 0; i < carpet; i++) addSpike(objects, x + i * 52);
-  addOrb(objects, x + 20, yJump, 48);
-  addOrb(objects, x + 200, yHigh, 48);
-  addOrb(objects, x + 380, yJump, 48);
-  if (tight >= 1) addOrb(objects, x + 540, yPad, 44);
+  addOrb(objects, x + 20, yJump, 52);
+  // One well-timed orb clears ~380px; extra orbs on II/III for chains
+  if (tight >= 1) {
+    addOrb(objects, x + 200, yHigh, 48);
+    addOrb(objects, x + 380, yJump, 48);
+  }
+  if (tight >= 2) addOrb(objects, x + 540, yPad, 44);
   x += carpet * 52 + land;
 
-  // Pad → orb over spikes → ground runway
+  // 9) Pad → orb finish approach (spikes only after pad arc is high)
   addPad(objects, x);
-  addSpike(objects, x + 150);
-  addSpike(objects, x + 210);
-  addOrb(objects, x + 200, yPad, 48);
-  addSpike(objects, x + 340);
-  addSpike(objects, x + 400);
-  x += 400 + Math.round(land * 1.3);
+  addOrb(objects, x + 200, yPad, 52);
+  addSpike(objects, x + 320);
+  addSpike(objects, x + 380);
+  x += 380 + Math.round(land * 1.2);
 
-  // Final pad → orb
   addPad(objects, x);
-  addOrb(objects, x + 180, yPad, 48);
-  addSpike(objects, x + 280);
-  addSpike(objects, x + 340);
+  addOrb(objects, x + 180, yPad, 52);
+  addSpike(objects, x + 300);
+  addSpike(objects, x + 360);
   if (tight >= 1) {
-    // Wait out pad→orb hang (~1s) before the next jump spike
     x += 340 + Math.round(speed * 1.05);
     addSpike(objects, x);
     addOrb(objects, x + 170, yJump, 44);
@@ -606,7 +614,6 @@ function buildYellowOrbs(objects, stage = 0) {
     x += 9 * 52 + land;
   }
 
-  // Open ground to the finish line (a G-S shelf is body-height — walking in = death)
   return x + Math.round(speed * 1.2);
 }
 
