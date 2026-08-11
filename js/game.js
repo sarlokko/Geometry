@@ -309,23 +309,8 @@ export class Game {
         }
         return false;
       }
-      const orb = this.findTouching("orb");
-      // Allow tap while falling or near apex — bounce from the orb itself
-      // (old code teleported to a fixed Y, which made height paths meaningless).
-      if (orb && p.vy > -420) {
-        const dir = orb.dir || 1;
-        p.y = orb.y + (orb.h - p.h) / 2;
-        p.vy = CONFIG.BALL_BOUNCE * dir;
-        p.onGround = false;
-        orb._used = true;
-        this.orbBuffer = false;
-        this.jumpBuffer = 0;
-        this._padLock = 0.1;
-        this.audio.orb();
-        this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 16, this.colors.orb);
-        return true;
-      }
-      return false;
+      // Yellow-orb ball: same as cube — tap while overlapping for an impulse (no teleport).
+      return this.tryOrbBoost();
     }
 
     // cube
@@ -339,40 +324,32 @@ export class Game {
       return true;
     }
 
-    if (this.orbBuffer) {
-      const orb = this.findTouching("orb");
-      if (orb) {
-        p.vy = CONFIG.ORB_VELOCITY * p.gravityDir;
-        p.onGround = false;
-        this.orbBuffer = false;
-        this.jumpBuffer = 0;
-        orb._used = true;
-        this.audio.orb();
-        this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, this.colors.orb);
-        return true;
-      }
-    }
-    return false;
+    return this.tryOrbBoost();
+  }
+
+  /** Geometry Dash–style yellow orb: impulse from current position on tap. */
+  tryOrbBoost() {
+    const p = this.player;
+    if (!p?.alive || !this.orbBuffer) return false;
+    const orb = this.findTouching("orb");
+    if (!orb) return false;
+    p.vy = CONFIG.ORB_VELOCITY * (orb.dir || p.gravityDir || 1);
+    p.onGround = false;
+    orb._used = true;
+    this.orbBuffer = false;
+    this.jumpBuffer = 0;
+    this._padLock = 0.08;
+    this.audio.orb();
+    this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, this.colors.orb);
+    return true;
   }
 
   findTouching(type) {
     const pbox = this.playerWorldBox();
     for (const o of this.level.objects) {
       if (o.type !== type || o._used) continue;
-      if (
-        type === "orb" &&
-        this.player?.mode === "ball" &&
-        this.player?.ballKind !== "walls"
-      ) {
-        // Tall enough to tap on the way down toward the orb, not a full column.
-        const pad = {
-          x: o.x - 22,
-          y: o.y - 110,
-          w: o.w + 44,
-          h: o.h + 150,
-        };
-        if (aabb(pbox, pad)) return o;
-      } else if (aabb(inflate(pbox, type === "orb" ? 14 : 10), o)) {
+      // Same generous-but-local hitbox for cube and ball orbs
+      if (aabb(inflate(pbox, type === "orb" ? 16 : 10), o)) {
         return o;
       }
     }
@@ -718,15 +695,8 @@ export class Game {
       }
     }
 
-    if (this.orbBuffer && p.mode === "cube" && !p.onGround) {
-      const orb = this.findTouching("orb");
-      if (orb) {
-        p.vy = CONFIG.ORB_VELOCITY * p.gravityDir;
-        this.orbBuffer = false;
-        orb._used = true;
-        this.audio.orb();
-        this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, C.orb);
-      }
+    if (this.orbBuffer && !p.onGround && (p.mode === "cube" || (p.mode === "ball" && p.ballKind !== "walls"))) {
+      this.tryOrbBoost();
     }
   }
 
