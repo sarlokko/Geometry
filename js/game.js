@@ -1,12 +1,12 @@
-import { CONFIG } from "./config.js?v=20260812a";
+import { CONFIG } from "./config.js?v=20260812b";
 import {
   WORLDS,
   createWorldLevel,
   clampWorld,
   clampStage,
   STAGE_COUNT,
-} from "./worlds.js?v=20260812a";
-import { AudioBus } from "./audio.js?v=20260812a";
+} from "./worlds.js?v=20260812b";
+import { AudioBus } from "./audio.js?v=20260812b";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
@@ -340,12 +340,12 @@ export class Game {
     p.vy = CONFIG.ORB_VELOCITY * (orb.dir || p.gravityDir || 1);
     p.onGround = false;
     orb._used = true;
+    // Consume the click — next orb in a chain needs another tap.
+    this.orbBuffer = false;
     this.jumpBuffer = 0;
     this._padLock = 0.08;
     this.audio.orb();
     this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, this.colors.orb);
-    // Stay armed in air so orb→orb chains flow; landing clears if not held.
-    this.orbBuffer = true;
     return true;
   }
 
@@ -353,8 +353,8 @@ export class Game {
     const pbox = this.playerWorldBox();
     for (const o of this.level.objects) {
       if (o.type !== type || o._used) continue;
-      // inflate() insets — use negative pad to grow the player box for orbs.
-      const box = type === "orb" ? inflate(pbox, -18) : inflate(pbox, 10);
+      // Orbs: modest expand (was -18 — too forgiving on hard chains).
+      const box = type === "orb" ? inflate(pbox, -12) : inflate(pbox, 10);
       if (box.w > 0 && box.h > 0 && aabb(box, o)) return o;
     }
     return null;
@@ -590,7 +590,7 @@ export class Game {
         p.vy = CONFIG.PAD_VELOCITY * dir;
         p.onGround = false;
         this._padLock = 0.14;
-        this.orbBuffer = true; // arm orb for the pad launch
+        // Pad does not arm orbs — every yellow orb still needs its own tap.
         this.audio.pad();
         this.burst(o.x + o.w / 2, o.y + o.h / 2, 12, C.pad);
         padLaunched = true;
