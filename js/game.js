@@ -1,12 +1,12 @@
-import { CONFIG } from "./config.js?v=20260811b";
+import { CONFIG } from "./config.js?v=20260812a";
 import {
   WORLDS,
   createWorldLevel,
   clampWorld,
   clampStage,
   STAGE_COUNT,
-} from "./worlds.js?v=20260811b";
-import { AudioBus } from "./audio.js?v=20260811b";
+} from "./worlds.js?v=20260812a";
+import { AudioBus } from "./audio.js?v=20260812a";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
@@ -340,13 +340,12 @@ export class Game {
     p.vy = CONFIG.ORB_VELOCITY * (orb.dir || p.gravityDir || 1);
     p.onGround = false;
     orb._used = true;
-    this.orbBuffer = false;
     this.jumpBuffer = 0;
     this._padLock = 0.08;
     this.audio.orb();
     this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, this.colors.orb);
-    // Holding the click keeps orbs armed for the next one in a chain.
-    if (this.held) this.orbBuffer = true;
+    // Stay armed in air so orb→orb chains flow; landing clears if not held.
+    this.orbBuffer = true;
     return true;
   }
 
