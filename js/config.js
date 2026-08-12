@@ -2,9 +2,9 @@ export const CONFIG = {
   WIDTH: 1280,
   HEIGHT: 720,
   GROUND_Y: 560,
+  CEILING_Y: 48,
   PLAYER_SIZE: 42,
   PLAYER_X: 280,
-  // Slower run = more reaction time
   SPEED: 360,
   GRAVITY: 2400,
   JUMP_VELOCITY: -980,
@@ -14,10 +14,21 @@ export const CONFIG = {
   SHIP_GRAVITY: 1100,
   MAX_FALL: 1300,
   ROTATION_SPEED: 7.5,
-  // Extra forgiveness
-  SPIKE_HITBOX_PAD: -10,
+  // Spike collision uses a triangle matching the art; these insets shrink it
+  // so grazing the empty AABB corners no longer kills you.
+  SPIKE_INSET: 7,
+  SPIKE_PLAYER_PAD: 5,
   COYOTE_TIME: 0.09,
   JUMP_BUFFER: 0.12,
+  // Mode-specific
+  // Hang ≈ 0.85s → ~340px at Neverland speed 400; pads are spaced/widen around that
+  BALL_BOUNCE: -1020,
+  BALL_SIZE: 34,
+  BALL_TAP_BOOST: -460,
+  UFO_FLAP: -720,
+  UFO_GRAVITY: 1550,
+  WAVE_VY: 520,
+  MINI_SCALE: 0.55,
 };
 
 export const COLORS = {

@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#06101c" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <title>Neon Dash — Geometry Dash Clone</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -11,35 +12,50 @@
     <link
       href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@500;600;700&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
-    <link rel="stylesheet" href="css/style.css" />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@500;600;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
+    <link rel="stylesheet" href="css/style.css?v=20260812c" />
   </head>
   <body>
     <div id="app">
       <canvas id="game" aria-label="Neon Dash game canvas"></canvas>
 
+      <button id="btn-music" class="music-toggle" type="button" aria-pressed="true" title="Musica">
+        Musica: ON
+      </button>
+
       <div id="hud" class="hud hidden" aria-live="polite">
         <div class="hud-top">
+          <span id="world-label">Aurora Run</span>
           <span id="attempt">Attempt 1</span>
           <span id="progress">0%</span>
         </div>
         <div class="progress-track" aria-hidden="true">
           <div id="progress-fill" class="progress-fill"></div>
         </div>
+        <p id="quirk" class="hud-quirk"></p>
       </div>
 
       <div id="menu" class="overlay">
         <div class="menu-panel">
           <p class="brand">NEON DASH</p>
-          <h1>Salta. Sopravvivi. Ripeti.</h1>
+          <h1>Dieci mondi. Tre stage ciascuno.</h1>
           <p class="tagline">
-            Un clone ritmico in stile Geometry Dash: il cubo corre da solo, tu decidi quando saltare.
+            Ogni mondo ha gli stage I · II · III a difficoltà crescente. Completa uno stage per sbloccare il successivo.
           </p>
+          <div id="world-grid" class="world-grid" role="listbox" aria-label="Selezione mondo"></div>
+          <p id="selected-quirk" class="selected-quirk"></p>
           <div class="cta-row">
             <button id="btn-play" class="btn primary" type="button">Gioca</button>
-            <button id="btn-practice" class="btn ghost" type="button">Practice</button>
           </div>
-          <p class="hint">Spazio / Click / Tocco per saltare · Esc per pausa</p>
+          <p class="hint">Clicca uno stage (I/II/III) per giocare · Spazio / Tocco · Esc pausa</p>
         </div>
       </div>
 
@@ -58,16 +74,17 @@
       <div id="complete" class="overlay hidden">
         <div class="menu-panel compact">
           <p class="brand small">NEON DASH</p>
-          <h2>Livello completato!</h2>
+          <h2>Mondo completato!</h2>
           <p id="complete-stats" class="tagline"></p>
           <div class="cta-row">
-            <button id="btn-again" class="btn primary" type="button">Ancora</button>
+            <button id="btn-next" class="btn primary hidden" type="button">Mondo successivo</button>
+            <button id="btn-again" class="btn ghost" type="button">Ancora</button>
             <button id="btn-complete-menu" class="btn ghost" type="button">Menu</button>
           </div>
         </div>
       </div>
     </div>
 
-    <script type="module" src="js/main.js"></script>
+    <script type="module" src="js/main.js?v=20260812c"></script>
   </body>
 </html>

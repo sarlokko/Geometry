@@ -1,9 +1,18 @@
-import { CONFIG, COLORS } from "./config.js";
-import { createLevel } from "./level.js";
-import { AudioBus } from "./audio.js";
+import { CONFIG } from "./config.js?v=20260812c";
+import {
+  WORLDS,
+  createWorldLevel,
+  clampWorld,
+  clampStage,
+  STAGE_COUNT,
+} from "./worlds.js?v=20260812c";
+import { AudioBus } from "./audio.js?v=20260812c";
 
-const STORAGE_ATTEMPTS = "neon-dash-attempts";
-const STORAGE_BEST = "neon-dash-best";
+const STORAGE_UNLOCK = "neon-dash-unlock";
+const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
+const STORAGE_BEST_PREFIX = "neon-dash-best-w";
+
+const FLY_MODES = new Set(["ship", "ufo", "wave", "ball"]);
 
 export class Game {
   /**
@@ -16,22 +25,32 @@ export class Game {
     this.hooks = hooks;
     this.audio = new AudioBus();
 
-    this.state = "menu"; // menu | playing | paused | dead | complete
-    this.practice = false;
-    this.attempt = Number(localStorage.getItem(STORAGE_ATTEMPTS) || 0);
-    this.best = Number(localStorage.getItem(STORAGE_BEST) || 0);
+    this.state = "menu";
+    this.worldId = 0;
+    this.stage = 0;
+    this.attempt = 0;
+    this.unlocked = Number(localStorage.getItem(STORAGE_UNLOCK) || 0);
+    if (!Number.isFinite(this.unlocked)) this.unlocked = 0;
+    this.unlocked = clampWorld(this.unlocked);
 
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Fold / hi-DPI phones: full DPR canvas + frequent resize storms will lock the UI.
+    const coarse =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    this._mobile = coarse || "ontouchstart" in window;
+    this.dpr = Math.min(window.devicePixelRatio || 1, this._mobile ? 1.25 : 2);
     this.scale = 1;
-    this.offsetY = 0;
 
     this.particles = [];
     this.cameraX = 0;
     this.held = false;
     this.orbBuffer = false;
     this._prevWorldY = 0;
+    this._padLock = 0;
 
-    this.level = createLevel();
+    this.colors = { ...WORLDS[0].colors };
+    this.level = createWorldLevel(0, 0);
+    this.best = this.loadBest(0, 0);
     this.resetPlayer(true);
 
     this._last = 0;
@@ -39,36 +58,123 @@ export class Game {
     this._shake = 0;
     this._flash = 0;
     this._bgPulse = 0;
+    this._resizeTimer = 0;
+    this._lastCssW = 0;
+    this._lastCssH = 0;
 
-    this._bindResize = () => this.resize();
+    this._bindResize = () => {
+      // Samsung Fold fires resize/visualViewport often — debounce & skip no-ops.
+      clearTimeout(this._resizeTimer);
+      this._resizeTimer = window.setTimeout(() => this.resize(), 120);
+    };
     window.addEventListener("resize", this._bindResize);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", this._bindResize);
+    }
     this.resize();
+  }
+
+  storageBestKey(worldId, stage) {
+    return `${STORAGE_BEST_PREFIX}${worldId}-s${stage}`;
+  }
+
+  loadBest(worldId, stage = 0) {
+    const key = this.storageBestKey(worldId, stage);
+    const v = Number(localStorage.getItem(key) || 0);
+    if (v) return v;
+    // Migrate legacy single-best keys onto stage I
+    if (stage === 0) {
+      const legacy = Number(localStorage.getItem(STORAGE_BEST_PREFIX + worldId) || 0);
+      return legacy || 0;
+    }
+    return 0;
+  }
+
+  saveBest(worldId, stage, value) {
+    localStorage.setItem(this.storageBestKey(worldId, stage), String(value));
+  }
+
+  getUnlocked() {
+    return this.unlocked;
+  }
+
+  /** Highest playable stage index for a world (0–2), or -1 if world locked. */
+  getStageUnlocked(worldId) {
+    worldId = clampWorld(worldId);
+    if (worldId > this.unlocked) return -1;
+    const raw = Number(localStorage.getItem(STORAGE_STAGE_PREFIX + worldId) || 0);
+    return clampStage(Number.isFinite(raw) ? raw : 0);
+  }
+
+  setStageUnlocked(worldId, stage) {
+    worldId = clampWorld(worldId);
+    stage = clampStage(stage);
+    const cur = this.getStageUnlocked(worldId);
+    if (stage > cur) {
+      localStorage.setItem(STORAGE_STAGE_PREFIX + worldId, String(stage));
+    }
+  }
+
+  setUnlocked(worldId) {
+    this.unlocked = clampWorld(worldId);
+    localStorage.setItem(STORAGE_UNLOCK, String(this.unlocked));
+    // Dev unlock: open all stages on unlocked worlds
+    for (let i = 0; i <= this.unlocked; i++) {
+      localStorage.setItem(STORAGE_STAGE_PREFIX + i, String(STAGE_COUNT - 1));
+    }
+  }
+
+  getWorldMeta(worldId = this.worldId) {
+    return WORLDS[clampWorld(worldId)];
   }
 
   resize() {
     const { WIDTH, HEIGHT } = CONFIG;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const vv = window.visualViewport;
+    const vw = Math.round(vv?.width || window.innerWidth);
+    const vh = Math.round(vv?.height || window.innerHeight);
     this.scale = Math.min(vw / WIDTH, vh / HEIGHT);
-    const cssW = WIDTH * this.scale;
-    const cssH = HEIGHT * this.scale;
-    this.canvas.style.width = `${cssW}px`;
-    this.canvas.style.height = `${cssH}px`;
-    this.canvas.style.left = `${(vw - cssW) / 2}px`;
-    this.canvas.style.top = `${(vh - cssH) / 2}px`;
-    this.canvas.width = Math.floor(WIDTH * this.dpr);
-    this.canvas.height = Math.floor(HEIGHT * this.dpr);
+    const cssW = Math.round(WIDTH * this.scale);
+    const cssH = Math.round(HEIGHT * this.scale);
+    if (cssW !== this._lastCssW || cssH !== this._lastCssH) {
+      this._lastCssW = cssW;
+      this._lastCssH = cssH;
+      this.canvas.style.width = `${cssW}px`;
+      this.canvas.style.height = `${cssH}px`;
+      this.canvas.style.left = `${Math.round((vw - cssW) / 2)}px`;
+      this.canvas.style.top = `${Math.round((vh - cssH) / 2)}px`;
+    }
+    const bufW = Math.floor(WIDTH * this.dpr);
+    const bufH = Math.floor(HEIGHT * this.dpr);
+    // Recreating the canvas buffer clears it and is expensive — only when needed.
+    if (this.canvas.width !== bufW || this.canvas.height !== bufH) {
+      this.canvas.width = bufW;
+      this.canvas.height = bufH;
+    }
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
-  start(practice = false) {
-    this.practice = practice;
-    this.attempt += 1;
-    localStorage.setItem(STORAGE_ATTEMPTS, String(this.attempt));
-    this.level = createLevel();
+  /** @param {number} worldId @param {number} [stage] */
+  start(worldId = this.worldId, stage = this.stage) {
+    this.worldId = clampWorld(worldId);
+    if (this.worldId > this.unlocked) this.worldId = this.unlocked;
+    this.stage = clampStage(stage);
+    const maxStage = Math.max(0, this.getStageUnlocked(this.worldId));
+    if (this.stage > maxStage) this.stage = maxStage;
+
+    // Fresh counter for every run / every level
+    this.attempt = 1;
+    this.level = createWorldLevel(this.worldId, this.stage);
+    this.colors = { ...this.level.world.colors };
+    this.best = this.loadBest(this.worldId, this.stage);
     this.resetPlayer(false);
     this.state = "playing";
     this.audio.ensure();
+    this.audio.setTrack({
+      bpm: this.level.world.bpm,
+      worldId: this.worldId,
+      forceRestart: true,
+    });
     this.audio.startBed();
     this.hooks.onHud?.(this.hudPayload());
     this._kickLoop();
@@ -95,18 +201,41 @@ export class Game {
   }
 
   resetPlayer(soft) {
+    const world = this.level?.world ?? WORLDS[0];
+    const scale = world.sizeScale || 1;
+    const mode = world.startMode || "cube";
+    const size =
+      mode === "ball" ? CONFIG.BALL_SIZE : Math.round(CONFIG.PLAYER_SIZE * scale);
+
+    let y = CONFIG.GROUND_Y - size;
+    let vy = 0;
+    if (mode === "ship" || mode === "ufo" || mode === "wave") {
+      y = CONFIG.GROUND_Y * 0.45;
+    } else if (mode === "ball") {
+      if (world.ballKind === "walls") {
+        y = CONFIG.GROUND_Y - size;
+        vy = 0;
+      } else {
+        y = CONFIG.GROUND_Y - 160;
+        vy = CONFIG.BALL_BOUNCE;
+      }
+    }
+
     this.player = {
       x: CONFIG.PLAYER_X,
-      y: CONFIG.GROUND_Y - CONFIG.PLAYER_SIZE,
-      vx: CONFIG.SPEED,
-      vy: 0,
-      w: CONFIG.PLAYER_SIZE,
-      h: CONFIG.PLAYER_SIZE,
-      onGround: true,
-      mode: "cube",
+      y,
+      vx: world.speed ?? CONFIG.SPEED,
+      vy,
+      w: size,
+      h: size,
+      onGround: mode === "cube" || (mode === "ball" && world.ballKind === "walls"),
+      mode,
+      gravityDir: 1,
       rotation: 0,
       alive: true,
       worldX: CONFIG.PLAYER_X,
+      sizeScale: scale,
+      ballKind: world.ballKind || "pads",
     };
     this.cameraX = 0;
     this.particles = [];
@@ -114,6 +243,8 @@ export class Game {
     this.orbBuffer = false;
     this.coyote = CONFIG.COYOTE_TIME;
     this.jumpBuffer = 0;
+    this._padLock = 0;
+    this._ballTapLock = 0;
     this._shake = 0;
     this._flash = 0;
     this.progress = 0;
@@ -122,11 +253,17 @@ export class Game {
   }
 
   hudPayload() {
+    const world = this.level?.world ?? WORLDS[this.worldId];
     return {
       attempt: this.attempt,
       progress: Math.floor(this.progress * 100),
       best: Math.floor(this.best * 100),
-      practice: this.practice,
+      worldId: this.worldId,
+      stage: this.stage,
+      worldName: world.displayName || world.name,
+      quirk: world.quirk,
+      mode: this.player?.mode,
+      bpm: world.bpm,
     };
   }
 
@@ -140,49 +277,85 @@ export class Game {
 
   release() {
     this.held = false;
+    // On mobile a tap is press+release before the jump peak. Keep the orb
+    // buffer armed while airborne so that tap can still catch a mid-arc orb.
+    // Cleared on landing (see resolveBounds) or when an orb is consumed.
+    if (this.player?.onGround) this.orbBuffer = false;
   }
 
   tryJump() {
     const p = this.player;
     if (!p.alive) return;
 
-    if (p.mode === "ship") {
-      // continuous thrust while held — handled in update
-      return;
+    if (p.mode === "ship" || p.mode === "wave") return;
+
+    if (p.mode === "ufo") {
+      p.vy = CONFIG.UFO_FLAP * p.gravityDir;
+      p.onGround = false;
+      this.jumpBuffer = 0;
+      this.audio.jump();
+      this.burst(p.x + p.w / 2, p.y + p.h / 2, 6, this.colors.playerUfo);
+      return true;
     }
 
+    if (p.mode === "ball") {
+      const kind = p.ballKind || this.level?.world?.ballKind || "pads";
+      if (kind === "walls") {
+        if (!this._ballTapLock || this._ballTapLock <= 0) {
+          p.gravityDir *= -1;
+          p.onGround = false;
+          p.vy = CONFIG.JUMP_VELOCITY * 0.22 * p.gravityDir;
+          this._ballTapLock = 0.16;
+          this.jumpBuffer = 0;
+          this.audio.jump();
+          this.burst(p.x + p.w / 2, p.y + p.h / 2, 8, this.colors.playerBall);
+          return true;
+        }
+        return false;
+      }
+      // Yellow-orb ball: same as cube — tap while overlapping for an impulse (no teleport).
+      return this.tryOrbBoost();
+    }
+
+    // cube
     if (p.onGround || this.coyote > 0) {
-      p.vy = CONFIG.JUMP_VELOCITY;
+      p.vy = CONFIG.JUMP_VELOCITY * p.gravityDir;
       p.onGround = false;
       this.coyote = 0;
       this.jumpBuffer = 0;
       this.audio.jump();
-      this.burst(p.x + p.w / 2, p.y + p.h, 8, COLORS.player);
+      this.burst(p.x + p.w / 2, p.y + p.h / 2, 8, this.colors.player);
       return true;
     }
 
-    // Orb jump if overlapping an orb and buffered
-    if (this.orbBuffer) {
-      const orb = this.findTouching("orb");
-      if (orb) {
-        p.vy = CONFIG.ORB_VELOCITY;
-        p.onGround = false;
-        this.orbBuffer = false;
-        this.jumpBuffer = 0;
-        orb._used = true;
-        this.audio.orb();
-        this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, COLORS.orb);
-        return true;
-      }
-    }
-    return false;
+    return this.tryOrbBoost();
+  }
+
+  /** Geometry Dash–style yellow orb: impulse from current position on tap. */
+  tryOrbBoost() {
+    const p = this.player;
+    if (!p?.alive || !this.orbBuffer) return false;
+    const orb = this.findTouching("orb");
+    if (!orb) return false;
+    p.vy = CONFIG.ORB_VELOCITY * (orb.dir || p.gravityDir || 1);
+    p.onGround = false;
+    orb._used = true;
+    // Consume the click — next orb in a chain needs another tap.
+    this.orbBuffer = false;
+    this.jumpBuffer = 0;
+    this._padLock = 0.08;
+    this.audio.orb();
+    this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, this.colors.orb);
+    return true;
   }
 
   findTouching(type) {
-    const box = inflate(this.playerWorldBox(), 10);
+    const pbox = this.playerWorldBox();
     for (const o of this.level.objects) {
       if (o.type !== type || o._used) continue;
-      if (aabb(box, o)) return o;
+      // Orbs: modest expand (was -18 — too forgiving on hard chains).
+      const box = type === "orb" ? inflate(pbox, -8) : inflate(pbox, 10);
+      if (box.w > 0 && box.h > 0 && aabb(box, o)) return o;
     }
     return null;
   }
@@ -200,14 +373,19 @@ export class Game {
       this._last = now;
       if (this.state === "playing") this.update(dt);
       this.draw();
-      if (this.state === "playing" || this.state === "dead" || this.state === "complete" || this.state === "paused" || this.state === "menu") {
+      if (
+        this.state === "playing" ||
+        this.state === "dead" ||
+        this.state === "complete" ||
+        this.state === "paused" ||
+        this.state === "menu"
+      ) {
         this._raf = requestAnimationFrame(tick);
       }
     };
     this._raf = requestAnimationFrame(tick);
   }
 
-  /** Keep rendering menu background when idle */
   startAttract() {
     this.state = "menu";
     this._kickLoop();
@@ -215,62 +393,49 @@ export class Game {
 
   update(dt) {
     const p = this.player;
+    const world = this.level.world;
     this._bgPulse += dt;
+    if (this._padLock > 0) this._padLock = Math.max(0, this._padLock - dt);
+    if (this._ballTapLock > 0) this._ballTapLock = Math.max(0, this._ballTapLock - dt);
 
-    // Horizontal auto-run in world space
     p.worldX += p.vx * dt;
     this.cameraX = p.worldX - CONFIG.PLAYER_X;
     p.x = CONFIG.PLAYER_X;
 
-    // Vertical physics
-    if (p.mode === "ship") {
-      const gravity = CONFIG.SHIP_GRAVITY;
-      p.vy += gravity * dt;
-      if (this.held) p.vy += CONFIG.SHIP_THRUST * dt;
-      p.vy = clamp(p.vy, -CONFIG.MAX_FALL, CONFIG.MAX_FALL);
-    } else {
-      p.vy += CONFIG.GRAVITY * dt;
-      if (p.vy > CONFIG.MAX_FALL) p.vy = CONFIG.MAX_FALL;
-    }
+    this.applyPhysics(dt);
 
     this._prevWorldY = p.y;
     p.y += p.vy * dt;
 
-    // Ground
-    p.onGround = false;
-    if (p.y + p.h >= CONFIG.GROUND_Y) {
-      p.y = CONFIG.GROUND_Y - p.h;
-      p.vy = 0;
-      p.onGround = true;
-      this.coyote = CONFIG.COYOTE_TIME;
-      if (p.mode === "cube") {
-        p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
-      }
-    } else if (p.mode === "cube") {
-      this.coyote = Math.max(0, this.coyote - dt);
-    }
+    this.resolveBounds(world, dt);
 
-    // Ceiling for ship
-    if (p.y < 40) {
-      p.y = 40;
-      if (p.vy < 0) p.vy = 0;
-    }
-
-    // Rotation
     if (p.mode === "cube" && !p.onGround) {
-      p.rotation += CONFIG.ROTATION_SPEED * dt;
-    } else if (p.mode === "ship") {
+      p.rotation += CONFIG.ROTATION_SPEED * dt * p.gravityDir;
+    } else if (p.mode === "ship" || p.mode === "ufo") {
       p.rotation = clamp(p.vy / 1400, -0.7, 0.7);
+    } else if (p.mode === "wave") {
+      p.rotation = this.held ? -0.7 * p.gravityDir : 0.7 * p.gravityDir;
+    } else if (p.mode === "ball") {
+      p.rotation += (p.vx / 80) * dt;
     }
 
     this.resolveObjects();
 
-    // Buffered jump after landing / coyote window
     if (this.jumpBuffer > 0) {
       this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
-      if (p.mode === "cube" && this.tryJump()) {
+      if ((p.mode === "cube" || p.mode === "ufo" || p.mode === "ball") && this.tryJump()) {
         /* consumed */
       }
+    }
+
+    // Yellow orbs: buffer stays armed after jump/pad, but tryJump only runs on
+    // press / ground-hold — poll every frame so overlapping orbs actually fire.
+    if (this.orbBuffer && p.alive && (p.mode === "cube" || p.mode === "ball")) {
+      this.tryOrbBoost();
+    }
+
+    if (this.held && p.mode === "cube" && (p.onGround || this.coyote > 0)) {
+      this.tryJump();
     }
 
     this.updateParticles(dt);
@@ -278,15 +443,24 @@ export class Game {
     this.progress = clamp(p.worldX / this.level.length, 0, 1);
     if (this.progress > this.best) {
       this.best = this.progress;
-      localStorage.setItem(STORAGE_BEST, String(this.best));
+      // localStorage every frame freezes some Android browsers — throttle.
+      this._bestDirty = true;
     }
-    this.hooks.onHud?.(this.hudPayload());
+    this._hudAcc = (this._hudAcc || 0) + dt;
+    if (this._hudAcc >= 0.1) {
+      this._hudAcc = 0;
+      if (this._bestDirty) {
+        this._bestDirty = false;
+        this.saveBest(this.worldId, this.stage, this.best);
+      }
+      this.hooks.onHud?.(this.hudPayload());
+    }
 
     if (this._shake > 0) this._shake = Math.max(0, this._shake - dt * 3);
     if (this._flash > 0) this._flash = Math.max(0, this._flash - dt * 3);
 
-    // Trail particles
-    if (Math.random() < 0.6) {
+    const trailChance = this._mobile ? 0.2 : 0.55;
+    if (Math.random() < trailChance) {
       this.particles.push({
         x: p.x + 4,
         y: p.y + p.h * (0.3 + Math.random() * 0.4),
@@ -295,62 +469,247 @@ export class Game {
         life: 0.35 + Math.random() * 0.2,
         max: 0.55,
         size: 3 + Math.random() * 3,
-        color: p.mode === "ship" ? COLORS.playerShip : COLORS.particle,
+        color: modeColor(p.mode, this.colors),
       });
     }
   }
 
+  applyPhysics(dt) {
+    const p = this.player;
+    const gDir = p.gravityDir;
+
+    if (p.mode === "ship") {
+      p.vy += CONFIG.SHIP_GRAVITY * gDir * dt;
+      if (this.held) p.vy += CONFIG.SHIP_THRUST * gDir * dt;
+      p.vy = clamp(p.vy, -CONFIG.MAX_FALL, CONFIG.MAX_FALL);
+      return;
+    }
+
+    if (p.mode === "ufo") {
+      p.vy += CONFIG.UFO_GRAVITY * gDir * dt;
+      p.vy = clamp(p.vy, -CONFIG.MAX_FALL, CONFIG.MAX_FALL);
+      return;
+    }
+
+    if (p.mode === "wave") {
+      const dir = this.held ? -1 : 1;
+      p.vy = CONFIG.WAVE_VY * dir * gDir;
+      return;
+    }
+
+    p.vy += CONFIG.GRAVITY * gDir * dt;
+    if (gDir === 1 && p.vy > CONFIG.MAX_FALL) p.vy = CONFIG.MAX_FALL;
+    if (gDir === -1 && p.vy < -CONFIG.MAX_FALL) p.vy = -CONFIG.MAX_FALL;
+  }
+
+  resolveBounds(world, dt) {
+    const p = this.player;
+    const gDir = p.gravityDir;
+    const ballKind = p.ballKind || world.ballKind || "pads";
+    const wallBall = p.mode === "ball" && ballKind === "walls";
+    const padBall = p.mode === "ball" && ballKind !== "walls";
+    const lethalFloor = world.lethalGround || padBall || p.mode === "wave";
+    const lethalCeil = world.lethalCeiling || p.mode === "wave";
+
+    p.onGround = false;
+
+    if (p.y + p.h >= CONFIG.GROUND_Y) {
+      if (lethalFloor || (gDir === -1 && FLY_MODES.has(p.mode) && !wallBall)) {
+        p.y = CONFIG.GROUND_Y - p.h;
+        this.die();
+        return;
+      }
+      if (
+        gDir === 1 &&
+        (p.mode === "cube" || p.mode === "ufo" || p.mode === "ship" || wallBall)
+      ) {
+        p.y = CONFIG.GROUND_Y - p.h;
+        p.vy = 0;
+        p.onGround = true;
+        this.coyote = CONFIG.COYOTE_TIME;
+        // Tap-jump orb buffer expires when you touch down.
+        if (!this.held) this.orbBuffer = false;
+        if (p.mode === "cube") {
+          p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+        }
+      } else if (gDir === -1 && (p.mode === "cube" || wallBall)) {
+        p.y = CONFIG.GROUND_Y - p.h;
+        if (p.vy > 0) p.vy = 0;
+      } else {
+        p.y = CONFIG.GROUND_Y - p.h;
+        this.die();
+        return;
+      }
+    } else if ((p.mode === "cube" || wallBall) && gDir === 1) {
+      this.coyote = Math.max(0, this.coyote - dt);
+    }
+
+    if (p.y <= CONFIG.CEILING_Y) {
+      if (lethalCeil) {
+        p.y = CONFIG.CEILING_Y;
+        this.die();
+        return;
+      }
+      if (gDir === -1 && (p.mode === "cube" || wallBall)) {
+        p.y = CONFIG.CEILING_Y;
+        p.vy = 0;
+        p.onGround = true;
+        this.coyote = CONFIG.COYOTE_TIME;
+        if (p.mode === "cube") {
+          p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+        }
+      } else if (padBall) {
+        p.y = CONFIG.CEILING_Y;
+        if (p.vy < 0) p.vy *= -0.25;
+      } else {
+        p.y = CONFIG.CEILING_Y;
+        if (p.vy < 0) p.vy = 0;
+      }
+    } else if ((p.mode === "cube" || wallBall) && gDir === -1 && !p.onGround) {
+      this.coyote = Math.max(0, this.coyote - dt);
+    }
+  }
+
   resolveObjects() {
+    if (this.state !== "playing") return;
     const p = this.player;
     const box = this.playerWorldBox();
+    const C = this.colors;
+    const gDir = p.gravityDir;
+
+    // Pads first — so a yellow pad under/near spikes can launch you before death.
+    let padLaunched = false;
+    if (this._padLock <= 0 && p.mode === "cube") {
+      for (const o of this.level.objects) {
+        if (o.type !== "pad" || o._used) continue;
+        if (!nearCamera(o, this.cameraX)) continue;
+        if (!aabb(box, o)) continue;
+        const dir = o.dir || 1;
+        const approaching = dir === 1 ? p.vy >= -20 : p.vy <= 20;
+        if (!approaching) continue;
+        p.vy = CONFIG.PAD_VELOCITY * dir;
+        p.onGround = false;
+        this._padLock = 0.14;
+        // Pad does not arm orbs — every yellow orb still needs its own tap.
+        this.audio.pad();
+        this.burst(o.x + o.w / 2, o.y + o.h / 2, 12, C.pad);
+        padLaunched = true;
+        break;
+      }
+    }
 
     for (const o of this.level.objects) {
       if (o._used) continue;
       if (!nearCamera(o, this.cameraX)) continue;
 
-      if (o.type === "spike" && aabb(box, inflate(o, CONFIG.SPIKE_HITBOX_PAD))) {
+      if (o.type === "spike" && hitsSpike(box, o)) {
+        // Pad launch this frame: body still overlaps ground spikes — don't cancel the bounce.
+        if (padLaunched) continue;
         this.die();
         return;
       }
 
       if (o.type === "block") {
-        // Slightly smaller player box vs blocks = fewer unfair side clips
+        if (padLaunched) continue;
         const blockBox = { x: box.x + 4, y: box.y, w: box.w - 8, h: box.h };
         if (!aabb(blockBox, o)) continue;
-        const fromTop = this._prevWorldY + p.h <= o.y + 16 && p.vy >= -60;
-        if (fromTop) {
-          p.y = o.y - p.h;
-          p.vy = 0;
-          p.onGround = true;
-          this.coyote = CONFIG.COYOTE_TIME;
-          if (p.mode === "cube") {
-            p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+
+        if (p.mode === "ball") {
+          const kind = p.ballKind || this.level?.world?.ballKind || "pads";
+          if (kind === "walls") {
+            if (gDir === 1) {
+              const fromTop = this._prevWorldY + p.h <= o.y + 16 && p.vy >= -60;
+              if (fromTop) {
+                p.y = o.y - p.h;
+                p.vy = 0;
+                p.onGround = true;
+                this.coyote = CONFIG.COYOTE_TIME;
+              } else if (
+                Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x) >
+                12
+              ) {
+                this.die();
+                return;
+              }
+            } else {
+              const fromBottom = this._prevWorldY >= o.y + o.h - 16 && p.vy <= 60;
+              if (fromBottom) {
+                p.y = o.y + o.h;
+                p.vy = 0;
+                p.onGround = true;
+                this.coyote = CONFIG.COYOTE_TIME;
+              } else if (
+                Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x) >
+                12
+              ) {
+                this.die();
+                return;
+              }
+            }
+            continue;
           }
-        } else if (p.mode === "ship") {
           this.die();
           return;
+        }
+
+        if (p.mode === "wave" || p.mode === "ship" || p.mode === "ufo") {
+          this.die();
+          return;
+        }
+
+        if (gDir === 1) {
+          const fromTop = this._prevWorldY + p.h <= o.y + 16 && p.vy >= -60;
+          if (fromTop) {
+            p.y = o.y - p.h;
+            p.vy = 0;
+            p.onGround = true;
+            this.coyote = CONFIG.COYOTE_TIME;
+            if (!this.held) this.orbBuffer = false;
+            p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+          } else {
+            const overlapX =
+              Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
+            if (overlapX > 12) {
+              this.die();
+              return;
+            }
+          }
         } else {
-          // Cube side hits: only lethal if deeply overlapping
-          const overlapX = Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
-          if (overlapX > 12) {
-            this.die();
-            return;
+          const fromBottom = this._prevWorldY >= o.y + o.h - 16 && p.vy <= 60;
+          if (fromBottom) {
+            p.y = o.y + o.h;
+            p.vy = 0;
+            p.onGround = true;
+            this.coyote = CONFIG.COYOTE_TIME;
+            p.rotation = Math.round(p.rotation / (Math.PI / 2)) * (Math.PI / 2);
+          } else {
+            const overlapX =
+              Math.min(blockBox.x + blockBox.w, o.x + o.w) - Math.max(blockBox.x, o.x);
+            if (overlapX > 12) {
+              this.die();
+              return;
+            }
           }
         }
       }
 
-      if (o.type === "pad" && aabb(box, o) && p.vy >= -20) {
-        p.vy = CONFIG.PAD_VELOCITY;
-        p.onGround = false;
-        this.audio.pad();
-        this.burst(o.x + o.w / 2, o.y, 12, COLORS.pad);
-      }
-
-      if (o.type === "portal" && aabb(box, o) && p.mode !== o.mode) {
-        p.mode = o.mode;
-        this.audio.portal();
-        this._flash = 0.35;
-        this.burst(o.x + o.w / 2, o.y + o.h / 2, 20, o.mode === "ship" ? COLORS.portalShip : COLORS.portalCube);
+      if (o.type === "portal" && aabb(box, o)) {
+        if (o.mode === "flip") {
+          if (!o._used) {
+            o._used = true;
+            p.gravityDir *= -1;
+            p.vy *= -0.35;
+            p.onGround = false;
+            this.audio.portal();
+            this._flash = 0.35;
+            this.burst(o.x + o.w / 2, o.y + o.h / 2, 20, C.portalFlip);
+          }
+        } else if (p.mode !== o.mode || (o.ballKind && p.ballKind !== o.ballKind)) {
+          this.enterMode(o.mode, o.ballKind);
+          this.audio.portal();
+          this._flash = 0.35;
+          this.burst(o.x + o.w / 2, o.y + o.h / 2, 20, portalColor(o.mode, C));
+        }
       }
 
       if (o.type === "finish" && box.x + box.w >= o.x) {
@@ -359,16 +718,57 @@ export class Game {
       }
     }
 
-    // Late orb press while overlapping
-    if (this.orbBuffer && p.mode === "cube" && !p.onGround) {
-      const orb = this.findTouching("orb");
-      if (orb) {
-        p.vy = CONFIG.ORB_VELOCITY;
-        this.orbBuffer = false;
-        orb._used = true;
-        this.audio.orb();
-        this.burst(orb.x + orb.w / 2, orb.y + orb.h / 2, 14, COLORS.orb);
+    if (this.orbBuffer && !p.onGround && (p.mode === "cube" || (p.mode === "ball" && p.ballKind !== "walls"))) {
+      this.tryOrbBoost();
+    }
+  }
+
+  enterMode(mode, ballKind) {
+    const p = this.player;
+    p.mode = mode;
+    p.onGround = false;
+    if (mode === "ball") {
+      const size = CONFIG.BALL_SIZE;
+      p.w = size;
+      p.h = size;
+      p.ballKind = ballKind || this.level?.world?.ballKind || "pads";
+      p.gravityDir = 1;
+      if (p.ballKind === "walls") {
+        p.y = clamp(p.y, CONFIG.CEILING_Y + 8, CONFIG.GROUND_Y - size);
+        if (p.y + size >= CONFIG.GROUND_Y - 2) {
+          p.y = CONFIG.GROUND_Y - size;
+          p.onGround = true;
+          p.vy = 0;
+        } else {
+          p.vy = Math.min(p.vy, 0);
+        }
+      } else {
+        p.y = CONFIG.GROUND_Y - 160;
+        p.vy = CONFIG.BALL_BOUNCE;
+        this._padLock = 0.08;
       }
+    } else if (mode === "cube") {
+      const scale = this.level.world.sizeScale || 1;
+      const size = Math.round(CONFIG.PLAYER_SIZE * scale);
+      const cy = clamp(p.y + p.h / 2, CONFIG.CEILING_Y + size / 2, CONFIG.GROUND_Y - size / 2);
+      p.w = size;
+      p.h = size;
+      p.y = cy - size / 2;
+      p.sizeScale = scale;
+      p.ballKind = null;
+      p.gravityDir = 1;
+      if (p.y + size >= CONFIG.GROUND_Y - 2) {
+        p.y = CONFIG.GROUND_Y - size;
+        p.onGround = true;
+        p.vy = 0;
+      }
+    } else {
+      const size = CONFIG.PLAYER_SIZE;
+      const cy = clamp(p.y + p.h / 2, CONFIG.CEILING_Y + size / 2, CONFIG.GROUND_Y - size / 2);
+      p.w = size;
+      p.h = size;
+      p.y = cy - size / 2;
+      p.ballKind = null;
     }
   }
 
@@ -376,23 +776,36 @@ export class Game {
     if (this.state !== "playing") return;
     this.state = "dead";
     this.player.alive = false;
+    if (this._bestDirty) {
+      this._bestDirty = false;
+      this.saveBest(this.worldId, this.stage, this.best);
+    }
     this.audio.die();
     this.audio.stopBed();
     this._shake = 0.45;
     this._flash = 0.5;
-    this.burst(this.player.x + this.player.w / 2, this.player.y + this.player.h / 2, 28, COLORS.spike);
+    this.burst(
+      this.player.x + this.player.w / 2,
+      this.player.y + this.player.h / 2,
+      28,
+      this.colors.spike
+    );
 
-    const delay = this.practice ? 350 : 700;
     setTimeout(() => {
       if (this.state !== "dead") return;
       this.attempt += 1;
-      localStorage.setItem(STORAGE_ATTEMPTS, String(this.attempt));
-      this.level = createLevel();
+      this.level = createWorldLevel(this.worldId, this.stage);
+      this.colors = { ...this.level.world.colors };
       this.resetPlayer(false);
       this.state = "playing";
+      this.audio.setTrack({
+        bpm: this.level.world.bpm,
+        worldId: this.worldId,
+        forceRestart: true,
+      });
       this.audio.startBed();
       this.hooks.onDeath?.(this.hudPayload());
-    }, delay);
+    }, 700);
   }
 
   complete() {
@@ -400,13 +813,46 @@ export class Game {
     this.state = "complete";
     this.progress = 1;
     this.best = 1;
-    localStorage.setItem(STORAGE_BEST, "1");
+    this._bestDirty = false;
+    this.saveBest(this.worldId, this.stage, 1);
+
+    let unlockNote = "";
+    let hasNext = false;
+    let nextWorld = this.worldId;
+    let nextStage = this.stage;
+
+    if (this.stage < STAGE_COUNT - 1) {
+      nextStage = this.stage + 1;
+      this.setStageUnlocked(this.worldId, nextStage);
+      hasNext = true;
+      unlockNote = ` Stage ${["I", "II", "III"][nextStage]} sbloccato.`;
+    } else {
+      const nextUnlock = Math.min(WORLDS.length - 1, this.worldId + 1);
+      if (nextUnlock > this.unlocked) {
+        this.unlocked = nextUnlock;
+        localStorage.setItem(STORAGE_UNLOCK, String(this.unlocked));
+        this.setStageUnlocked(nextUnlock, 0);
+        unlockNote = ` Mondo ${nextUnlock + 1} sbloccato.`;
+      }
+      hasNext = this.worldId < WORLDS.length - 1;
+      nextWorld = Math.min(WORLDS.length - 1, this.worldId + 1);
+      nextStage = 0;
+    }
+
     this.audio.win();
     this.audio.stopBed();
     this._flash = 0.6;
     this.hooks.onComplete?.({
       attempt: this.attempt,
       best: 100,
+      worldId: this.worldId,
+      stage: this.stage,
+      worldName: this.level.world.displayName || this.level.world.name,
+      unlocked: this.unlocked,
+      hasNext,
+      nextWorld,
+      nextStage,
+      unlockNote,
     });
     this.hooks.onHud?.(this.hudPayload());
   }
@@ -441,6 +887,8 @@ export class Game {
   draw() {
     const ctx = this.ctx;
     const { WIDTH, HEIGHT, GROUND_Y } = CONFIG;
+    const C = this.colors;
+    const world = this.level.world;
     const shakeX = (Math.random() - 0.5) * this._shake * 24;
     const shakeY = (Math.random() - 0.5) * this._shake * 18;
 
@@ -448,72 +896,48 @@ export class Game {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
     ctx.translate(shakeX, shakeY);
 
-    // Sky
     const g = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-    g.addColorStop(0, COLORS.skyTop);
-    g.addColorStop(1, COLORS.skyBottom);
+    g.addColorStop(0, C.skyTop);
+    g.addColorStop(1, C.skyBottom);
     ctx.fillStyle = g;
     ctx.fillRect(-20, -20, WIDTH + 40, HEIGHT + 40);
 
-    // Parallax grid
     this.drawParallax(ctx);
 
-    // Ground
-    ctx.fillStyle = COLORS.ground;
+    const dangerFloor =
+      world.lethalGround ||
+      (this.player?.mode === "ball" && this.player?.ballKind !== "walls");
+    ctx.fillStyle = dangerFloor ? "#2a0a12" : C.ground;
     ctx.fillRect(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y);
-    ctx.strokeStyle = COLORS.groundLine;
+    ctx.strokeStyle = dangerFloor ? C.spike : C.groundLine;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(0, GROUND_Y);
     ctx.lineTo(WIDTH, GROUND_Y);
     ctx.stroke();
 
-    // Ground pattern
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, GROUND_Y, WIDTH, HEIGHT - GROUND_Y);
-    ctx.clip();
-    ctx.strokeStyle = "rgba(57,240,192,0.08)";
-    ctx.lineWidth = 1;
-    const scroll = -((this.cameraX * 0.8) % 48);
-    for (let x = scroll; x < WIDTH + 48; x += 48) {
+    if (world.lethalCeiling) {
+      ctx.fillStyle = "#2a0a12";
+      ctx.fillRect(0, 0, WIDTH, CONFIG.CEILING_Y);
+      ctx.strokeStyle = C.spike;
       ctx.beginPath();
-      ctx.moveTo(x, GROUND_Y);
-      ctx.lineTo(x - 40, HEIGHT);
+      ctx.moveTo(0, CONFIG.CEILING_Y);
+      ctx.lineTo(WIDTH, CONFIG.CEILING_Y);
       ctx.stroke();
     }
-    ctx.restore();
 
-    // Objects
     for (const o of this.level.objects) {
-      if (!nearCamera(o, this.cameraX, 80)) continue;
+      if (!nearCamera(o, this.cameraX, 120)) continue;
       const sx = o.x - this.cameraX;
       this.drawObject(ctx, o, sx);
     }
 
-    // Particles
-    for (const p of this.particles) {
-      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y, p.size, p.size);
-    }
-    ctx.globalAlpha = 1;
+    this.drawParticles(ctx);
+    this.drawPlayer(ctx);
 
-    // Player
-    if (this.player.alive || this.state === "dead") {
-      this.drawPlayer(ctx);
-    }
-
-    // Flash
     if (this._flash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${this._flash * 0.35})`;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    }
-
-    // Menu attract vignette text handled by DOM; draw subtle scanlines
-    ctx.fillStyle = "rgba(0,0,0,0.05)";
-    for (let y = 0; y < HEIGHT; y += 4) {
-      ctx.fillRect(0, y, WIDTH, 1);
     }
 
     ctx.restore();
@@ -522,13 +946,14 @@ export class Game {
   drawParallax(ctx) {
     const { WIDTH, HEIGHT } = CONFIG;
     const t = this._bgPulse;
+    const C = this.colors;
     const layers = [
-      { speed: 0.15, alpha: 0.08, gap: 90 },
-      { speed: 0.35, alpha: 0.12, gap: 70 },
+      { parallax: 0.15, gap: 140, alpha: 0.05 },
+      { parallax: 0.35, gap: 90, alpha: 0.07 },
     ];
     for (const layer of layers) {
-      const off = -((this.cameraX * layer.speed) % layer.gap);
-      ctx.strokeStyle = `rgba(126, 231, 255, ${layer.alpha})`;
+      const off = -((this.cameraX * layer.parallax) % layer.gap);
+      ctx.strokeStyle = hexAlpha(C.blockEdge, layer.alpha);
       ctx.lineWidth = 1;
       for (let x = off; x < WIDTH; x += layer.gap) {
         ctx.beginPath();
@@ -545,108 +970,179 @@ export class Game {
       }
     }
 
-    // Floating deco cubes in background
     ctx.save();
     for (let i = 0; i < 6; i++) {
       const x = ((i * 210 - this.cameraX * 0.2) % (WIDTH + 100) + WIDTH + 100) % (WIDTH + 100) - 50;
       const y = 100 + (i % 3) * 70 + Math.sin(t + i) * 8;
-      ctx.strokeStyle = "rgba(57,240,192,0.15)";
+      ctx.strokeStyle = hexAlpha(C.player, 0.15);
       ctx.strokeRect(x, y, 28, 28);
     }
     ctx.restore();
   }
 
   drawObject(ctx, o, sx) {
+    const C = this.colors;
     if (o.type === "block") {
-      ctx.fillStyle = COLORS.block;
+      ctx.fillStyle = C.block;
       ctx.fillRect(sx, o.y, o.w, o.h);
-      ctx.strokeStyle = COLORS.blockEdge;
+      ctx.strokeStyle = C.blockEdge;
       ctx.lineWidth = 2;
       ctx.strokeRect(sx + 1, o.y + 1, o.w - 2, o.h - 2);
-      ctx.fillStyle = "rgba(126,231,255,0.12)";
-      ctx.fillRect(sx + 4, o.y + 4, o.w * 0.35, 6);
     } else if (o.type === "spike") {
-      ctx.fillStyle = COLORS.spike;
+      ctx.fillStyle = C.spike;
       ctx.beginPath();
-      ctx.moveTo(sx, o.y + o.h);
-      ctx.lineTo(sx + o.w / 2, o.y);
-      ctx.lineTo(sx + o.w, o.y + o.h);
+      if ((o.dir || 1) === 1) {
+        ctx.moveTo(sx, o.y + o.h);
+        ctx.lineTo(sx + o.w / 2, o.y);
+        ctx.lineTo(sx + o.w, o.y + o.h);
+      } else {
+        ctx.moveTo(sx, o.y);
+        ctx.lineTo(sx + o.w / 2, o.y + o.h);
+        ctx.lineTo(sx + o.w, o.y);
+      }
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.25)";
-      ctx.stroke();
     } else if (o.type === "pad") {
-      ctx.fillStyle = COLORS.pad;
+      ctx.fillStyle = C.pad;
       ctx.fillRect(sx, o.y, o.w, o.h);
-      ctx.fillStyle = "rgba(255,255,255,0.45)";
-      ctx.fillRect(sx + 4, o.y + 2, o.w - 8, 3);
+      ctx.fillStyle = "#fff6b0";
+      ctx.fillRect(sx + 2, o.y + 2, o.w - 4, 3);
     } else if (o.type === "orb") {
-      const pulse = 1 + Math.sin(performance.now() / 120) * 0.08;
-      const r = (o.w / 2) * pulse;
       const cx = sx + o.w / 2;
       const cy = o.y + o.h / 2;
+      const r = Math.min(o.w, o.h) / 2;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = COLORS.orb;
+      ctx.fillStyle = C.orb;
       ctx.fill();
       ctx.lineWidth = 3;
       ctx.strokeStyle = "#fff6b0";
       ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(20,20,20,0.35)";
-      ctx.stroke();
     } else if (o.type === "portal") {
-      const color = o.mode === "ship" ? COLORS.portalShip : COLORS.portalCube;
-      const grad = ctx.createLinearGradient(sx, o.y, sx + o.w, o.y + o.h);
+      const color = portalColor(o.mode, C);
+      const grad = ctx.createLinearGradient(sx, o.y, sx + o.w, o.y);
       grad.addColorStop(0, "transparent");
-      grad.addColorStop(0.5, color);
+      grad.addColorStop(0.35, color);
+      grad.addColorStop(0.65, color);
       grad.addColorStop(1, "transparent");
+      ctx.globalAlpha = 0.55;
       ctx.fillStyle = grad;
       ctx.fillRect(sx, o.y, o.w, o.h);
+      ctx.globalAlpha = 1;
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
       ctx.strokeRect(sx, o.y, o.w, o.h);
+      ctx.fillStyle = color;
+      ctx.font = "bold 12px Orbitron, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(modeGlyph(o.mode), sx + o.w / 2, o.y + o.h / 2);
+      ctx.textBaseline = "alphabetic";
     } else if (o.type === "finish") {
       const stripe = 14;
       for (let i = 0; i < o.h; i += stripe) {
         ctx.fillStyle = i % (stripe * 2) === 0 ? "#fff" : "#111";
         ctx.fillRect(sx, o.y + i, o.w, stripe);
       }
-    } else if (o.type === "deco") {
-      ctx.strokeStyle = "rgba(255,216,74,0.25)";
-      ctx.strokeRect(sx, o.y, o.w, o.h);
     }
   }
 
   drawPlayer(ctx) {
     const p = this.player;
+    const C = this.colors;
     const cx = p.x + p.w / 2;
     const cy = p.y + p.h / 2;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(p.rotation);
+
     if (p.mode === "ship") {
-      ctx.fillStyle = COLORS.playerShip;
+      ctx.fillStyle = C.playerShip;
       ctx.beginPath();
-      ctx.moveTo(-p.w * 0.45, p.h * 0.35);
-      ctx.lineTo(p.w * 0.5, 0);
-      ctx.lineTo(-p.w * 0.45, -p.h * 0.35);
+      ctx.moveTo(p.w / 2, 0);
+      ctx.lineTo(-p.w / 2, -p.h / 2);
+      ctx.lineTo(-p.w / 3, 0);
+      ctx.lineTo(-p.w / 2, p.h / 2);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(-p.w * 0.2, -6, 12, 12);
+    } else if (p.mode === "ball") {
+      ctx.fillStyle = C.playerBall;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#fff6b0";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-p.w / 3, 0);
+      ctx.lineTo(p.w / 3, 0);
+      ctx.stroke();
+    } else if (p.mode === "ufo") {
+      ctx.fillStyle = C.playerUfo;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.w / 2, p.h / 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, -p.h / 6, p.w / 3, Math.PI, 0);
+      ctx.fill();
+    } else if (p.mode === "wave") {
+      ctx.fillStyle = C.playerWave;
+      ctx.beginPath();
+      ctx.moveTo(-p.w / 2, p.h / 3);
+      ctx.lineTo(0, -p.h / 2);
+      ctx.lineTo(p.w / 2, p.h / 3);
+      ctx.closePath();
+      ctx.fill();
     } else {
-      ctx.fillStyle = COLORS.player;
+      ctx.fillStyle = C.player;
       ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-      ctx.strokeStyle = "rgba(255,255,255,0.55)";
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#ffffffaa";
+      ctx.lineWidth = 2;
       ctx.strokeRect(-p.w / 2 + 2, -p.h / 2 + 2, p.w - 4, p.h - 4);
-      ctx.fillStyle = "rgba(4,16,24,0.35)";
-      ctx.fillRect(-6, -6, 12, 12);
     }
+
+    if (p.gravityDir === -1 && p.mode === "cube") {
+      ctx.strokeStyle = C.portalFlip;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-p.w / 2 - 2, -p.h / 2 - 2, p.w + 4, p.h + 4);
+    }
+
     ctx.restore();
   }
+
+  drawParticles(ctx) {
+    for (const part of this.particles) {
+      ctx.globalAlpha = clamp(part.life / part.max, 0, 1);
+      ctx.fillStyle = part.color;
+      ctx.fillRect(part.x, part.y, part.size, part.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function modeColor(mode, C) {
+  if (mode === "ship") return C.playerShip;
+  if (mode === "ball") return C.playerBall;
+  if (mode === "ufo") return C.playerUfo;
+  if (mode === "wave") return C.playerWave;
+  return C.player;
+}
+
+function portalColor(mode, C) {
+  if (mode === "ship") return C.portalShip;
+  if (mode === "ball") return C.portalBall;
+  if (mode === "ufo") return C.portalUfo;
+  if (mode === "wave") return C.portalWave;
+  if (mode === "flip") return C.portalFlip;
+  return C.portalCube;
+}
+
+function modeGlyph(mode) {
+  if (mode === "ship") return "SHIP";
+  if (mode === "ball") return "BALL";
+  if (mode === "ufo") return "UFO";
+  if (mode === "wave") return "WAVE";
+  if (mode === "flip") return "FLIP";
+  return "CUBE";
 }
 
 function aabb(a, b) {
@@ -654,14 +1150,131 @@ function aabb(a, b) {
 }
 
 function inflate(o, pad) {
-  return { x: o.x - pad, y: o.y - pad, w: o.w + pad * 2, h: o.h + pad * 2 };
+  return { x: o.x + pad, y: o.y + pad, w: o.w - pad * 2, h: o.h - pad * 2 };
 }
 
-function nearCamera(o, cameraX, margin = 40) {
-  const sx = o.x - cameraX;
-  return sx + (o.w || 40) > -margin && sx < CONFIG.WIDTH + margin;
+/** Triangle hitbox matching drawn spikes, with forgiveness inset. */
+function hitsSpike(playerBox, spike) {
+  const inset = CONFIG.SPIKE_INSET ?? 7;
+  const playerPad = CONFIG.SPIKE_PLAYER_PAD ?? 5;
+  const box = inflate(playerBox, playerPad);
+  if (box.w <= 0 || box.h <= 0) return false;
+
+  // Broad-phase: skip if not even near the spike bounds
+  if (!aabb(box, spike)) return false;
+
+  const x = spike.x;
+  const y = spike.y;
+  const w = spike.w;
+  const h = spike.h;
+  /** @type {{x:number,y:number}[]} */
+  let tri;
+  if ((spike.dir || 1) === 1) {
+    // Floor spike — tip up
+    tri = [
+      { x: x + inset, y: y + h },
+      { x: x + w * 0.5, y: y + inset },
+      { x: x + w - inset, y: y + h },
+    ];
+  } else {
+    // Ceiling spike — tip down
+    tri = [
+      { x: x + inset, y: y },
+      { x: x + w * 0.5, y: y + h - inset },
+      { x: x + w - inset, y: y },
+    ];
+  }
+  return rectIntersectsTriangle(box, tri);
+}
+
+function pointInTriangle(p, a, b, c) {
+  const v0x = c.x - a.x;
+  const v0y = c.y - a.y;
+  const v1x = b.x - a.x;
+  const v1y = b.y - a.y;
+  const v2x = p.x - a.x;
+  const v2y = p.y - a.y;
+  const dot00 = v0x * v0x + v0y * v0y;
+  const dot01 = v0x * v1x + v0y * v1y;
+  const dot02 = v0x * v2x + v0y * v2y;
+  const dot11 = v1x * v1x + v1y * v1y;
+  const dot12 = v1x * v2x + v1y * v2y;
+  const inv = 1 / (dot00 * dot11 - dot01 * dot01);
+  const u = (dot11 * dot02 - dot01 * dot12) * inv;
+  const v = (dot00 * dot12 - dot01 * dot02) * inv;
+  return u >= 0 && v >= 0 && u + v <= 1;
+}
+
+function segmentsIntersect(a, b, c, d) {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const cdx = d.x - c.x;
+  const cdy = d.y - c.y;
+  const den = abx * cdy - aby * cdx;
+  if (Math.abs(den) < 1e-8) return false;
+  const acx = c.x - a.x;
+  const acy = c.y - a.y;
+  const t = (acx * cdy - acy * cdx) / den;
+  const u = (acx * aby - acy * abx) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+function rectIntersectsTriangle(rect, tri) {
+  const corners = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y + rect.h },
+    { x: rect.x, y: rect.y + rect.h },
+  ];
+  // Any player corner inside the spike triangle
+  for (const p of corners) {
+    if (pointInTriangle(p, tri[0], tri[1], tri[2])) return true;
+  }
+  // Any triangle tip inside the player
+  for (const p of tri) {
+    if (
+      p.x >= rect.x &&
+      p.x <= rect.x + rect.w &&
+      p.y >= rect.y &&
+      p.y <= rect.y + rect.h
+    ) {
+      return true;
+    }
+  }
+  // Edge crossings (catches grazing along an edge)
+  const edges = [
+    [corners[0], corners[1]],
+    [corners[1], corners[2]],
+    [corners[2], corners[3]],
+    [corners[3], corners[0]],
+  ];
+  const tEdges = [
+    [tri[0], tri[1]],
+    [tri[1], tri[2]],
+    [tri[2], tri[0]],
+  ];
+  for (const [a, b] of edges) {
+    for (const [c, d] of tEdges) {
+      if (segmentsIntersect(a, b, c, d)) return true;
+    }
+  }
+  return false;
+}
+
+function nearCamera(o, cam, pad = 80) {
+  return o.x + (o.w || 40) > cam - pad && o.x < cam + CONFIG.WIDTH + pad;
 }
 
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
+}
+
+function hexAlpha(hex, a) {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
 }
