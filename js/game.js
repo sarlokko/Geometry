@@ -1,12 +1,12 @@
-import { CONFIG } from "./config.js?v=20260812b";
+import { CONFIG } from "./config.js?v=20260812c";
 import {
   WORLDS,
   createWorldLevel,
   clampWorld,
   clampStage,
   STAGE_COUNT,
-} from "./worlds.js?v=20260812b";
-import { AudioBus } from "./audio.js?v=20260812b";
+} from "./worlds.js?v=20260812c";
+import { AudioBus } from "./audio.js?v=20260812c";
 
 const STORAGE_UNLOCK = "neon-dash-unlock";
 const STORAGE_STAGE_PREFIX = "neon-dash-stage-w";
@@ -354,7 +354,7 @@ export class Game {
     for (const o of this.level.objects) {
       if (o.type !== type || o._used) continue;
       // Orbs: modest expand (was -18 — too forgiving on hard chains).
-      const box = type === "orb" ? inflate(pbox, -12) : inflate(pbox, 10);
+      const box = type === "orb" ? inflate(pbox, -8) : inflate(pbox, 10);
       if (box.w > 0 && box.h > 0 && aabb(box, o)) return o;
     }
     return null;

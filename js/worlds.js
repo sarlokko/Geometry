@@ -1,4 +1,4 @@
-import { CONFIG } from "./config.js?v=20260812b";
+import { CONFIG } from "./config.js?v=20260812c";
 
 const S = CONFIG.PLAYER_SIZE;
 const G = CONFIG.GROUND_Y;
@@ -71,7 +71,7 @@ export const WORLDS = [
     subtitle: "Pad e orb gialle",
     quirk: "Pad = rimbalzo auto. Ogni orb gialla richiede un tap (catene = ritmo di click).",
     bpm: 144,
-    speed: 380,
+    speed: 400,
     startMode: "cube",
     colors: theme("#1a1008", "#3a2810", "#ffd84a", "#5a3a18", "#ffd08a"),
   },
@@ -158,7 +158,9 @@ export function createWorldLevel(worldId, stage = 0) {
   const world = {
     ...base,
     colors: { ...base.colors },
-    speed: Math.round(base.speed * (1 + stage * 0.14)),
+    speed: Math.round(
+      base.speed * (1 + stage * (base.id === 5 ? 0.22 : 0.14))
+    ),
     bpm: base.bpm + stage * 10,
     stage,
     stageLabel: STAGE_LABELS[stage],
@@ -502,22 +504,24 @@ function buildWallBall(objects, stage = 0) {
 
 /**
  * 5 — Pallini: yellow pads (auto) + yellow orbs (tap each one).
- * Stage I = tutorial. II = hard rhythmic chains. III = extreme spam.
+ * Stage I = tutorial. II = hard. III = extreme (+~50% vs previous).
  */
 function buildYellowOrbs(objects, stage = 0) {
   const tight = stage;
-  const speed = Math.round(380 * (1 + stage * 0.2));
-  const land = Math.round(speed * (tight === 0 ? 0.55 : tight === 1 ? 0.32 : 0.22));
+  // Match createWorldLevel Pallini speed curve (id 5 → stage * 0.22)
+  const speed = Math.round(400 * (1 + stage * (tight === 0 ? 0.14 : 0.22)));
+  const land = Math.round(speed * (tight === 0 ? 0.55 : tight === 1 ? 0.22 : 0.14));
   const yJump = G - 185;
   const yPad = G - 255;
   const yPeak = G - 360;
-  const yMid = G - 310;
   const yLate = G - 250;
-  const gap = Math.round(speed * (tight >= 2 ? 0.165 : tight === 1 ? 0.185 : 0.2));
-  const orbSize = tight >= 2 ? 40 : tight === 1 ? 44 : 48;
+  // Tighter tap windows (~50% less reaction than soft layout)
+  const gap = Math.round(speed * (tight >= 2 ? 0.14 : tight === 1 ? 0.155 : 0.2));
+  const orbSize = tight >= 2 ? 36 : tight === 1 ? 40 : 48;
+  const carpetStep = tight >= 2 ? 30 : tight === 1 ? 34 : 44;
   let x = 480;
 
-  const carpet = (startX, endX, step = 44) => {
+  const carpet = (startX, endX, step = carpetStep) => {
     for (let sx = startX; sx < endX; sx += step) addSpike(objects, sx);
   };
   const placeChain = (startX, heights, size = orbSize) => {
@@ -587,132 +591,114 @@ function buildYellowOrbs(objects, stage = 0) {
     return x + 340 + land + Math.round(speed * 1.2);
   }
 
-  // ===== II / III — tap every orb or die on the carpet =====
+  // ===== II / III — ~50% harder: faster, tighter, longer, almost no pads =====
 
+  // Single intro pad only — then longer approach so the first jump can meet the chain
   addPad(objects, x);
-  addSpike(objects, x + 130);
-  addSpike(objects, x + 190);
-  x += Math.round(speed * 0.95) + land;
+  addSpike(objects, x + 120);
+  addSpike(objects, x + 175);
+  addSpike(objects, x + 230);
+  x += Math.round(speed * 1.0) + land;
 
-  // Forced jump → long chain
+  // Opening gauntlet
   {
+    const hs =
+      tight >= 2
+        ? [yJump, yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yLate]
+        : [yJump, yPeak, yPeak, yPeak, yPeak, yPeak, yLate];
+    addSpike(objects, x);
+    addSpike(objects, x + 45);
+    const start = x + 140;
+    const end = placeChain(start, hs);
+    carpet(x + 30, end + 20);
+    x = end + Math.round(speed * 0.42) + land;
+  }
+
+  // Immediate second chain
+  {
+    const hs =
+      tight >= 2
+        ? [yJump, yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yLate]
+        : [yJump, yPeak, yPeak, yPeak, yPeak, yPeak, yLate];
+    addSpike(objects, x);
+    addSpike(objects, x + 35);
+    const start = x + 90;
+    const end = placeChain(start, hs);
+    carpet(x + 10, end + 20);
+    x = end + Math.round(speed * 0.32) + land;
+  }
+
+  // Burst spam (II:3 III:4) — tiny recoveries
+  for (let burst = 0; burst < (tight >= 2 ? 4 : 3); burst++) {
     const hs =
       tight >= 2
         ? [yJump, yPeak, yPeak, yPeak, yPeak, yLate]
         : [yJump, yPeak, yPeak, yPeak, yLate];
     addSpike(objects, x);
-    addSpike(objects, x + 50);
-    const start = x + 130;
+    addSpike(objects, x + 30);
+    const start = x + 85;
     const end = placeChain(start, hs);
-    carpet(x + 40, end + 25, tight >= 2 ? 40 : 46);
-    x = end + Math.round(speed * 0.55) + land;
+    carpet(x, end + 18);
+    x = end + Math.round(speed * (tight >= 2 ? 0.2 : 0.26)) + Math.round(land * 0.7);
   }
 
-  // Micro land → immediate chain
+  // Punish: single bait orb → long peak spam
+  addSpike(objects, x);
+  addSpike(objects, x + 40);
+  addOrb(objects, x + 110, yJump, orbSize);
+  {
+    const hs =
+      tight >= 2
+        ? [yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yLate, yPeak]
+        : [yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yLate, yPeak];
+    const end = placeChain(x + 110 + gap, hs);
+    carpet(x + 30, end + 18);
+    x = end + Math.round(speed * 0.34) + land;
+  }
+
+  // II extra mid gauntlet / III triple finale
+  if (tight === 1) {
+    for (let g = 0; g < 2; g++) {
+      const hs = [yJump, yPeak, yPeak, yPeak, yPeak, yPeak, yLate];
+      addSpike(objects, x);
+      const end = placeChain(x + 80, hs);
+      carpet(x, end + 18);
+      x = end + Math.round(speed * 0.3) + land;
+    }
+  } else {
+    for (let g = 0; g < 3; g++) {
+      const hs = [
+        yJump, yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yLate, yPeak,
+      ];
+      addSpike(objects, x);
+      addSpike(objects, x + 28);
+      const end = placeChain(x + 70, hs, 34);
+      carpet(x, end + 16, 28);
+      x = end + Math.round(speed * 0.22) + Math.round(land * 0.8);
+    }
+  }
+
+  // Finish chain — still no free pad in front
+  addSpike(objects, x);
+  addSpike(objects, x + 40);
   {
     const hs =
       tight >= 2
         ? [yJump, yPeak, yPeak, yPeak, yPeak, yPeak, yLate]
-        : [yJump, yPeak, yPeak, yPeak, yLate];
-    addSpike(objects, x);
-    addSpike(objects, x + 45);
-    const start = x + 110;
-    const end = placeChain(start, hs);
-    carpet(x + 20, end + 25, tight >= 2 ? 38 : 44);
-    x = end + Math.round(speed * 0.5) + land;
+        : [yJump, yPeak, yPeak, yPeak, yPeak, yLate];
+    const end = placeChain(x + 95, hs);
+    carpet(x + 20, end + 18);
+    x = end + Math.round(speed * 0.4);
   }
 
-  // Rare pad breather — chain still needs taps
+  // One last pad only to clear exit spikes
   addPad(objects, x);
   addSpike(objects, x + 120);
-  addSpike(objects, x + 175);
-  {
-    const hs =
-      tight >= 2
-        ? [yPad, yPeak, yPeak, yPeak, yPeak, yLate]
-        : [yPad, yPeak, yPeak, yLate];
-    const end = placeChain(x + 155, hs);
-    carpet(x + 200, end + 25, 42);
-    x = end + Math.round(speed * 0.48) + land;
-  }
+  addSpike(objects, x + 170);
+  addSpike(objects, x + 220);
+  x += Math.round(speed * 0.85);
 
-  // Burst chains with almost no ground
-  for (let burst = 0; burst < (tight >= 2 ? 3 : 2); burst++) {
-    const hs =
-      tight >= 2
-        ? [yJump, yPeak, yPeak, yPeak, yLate]
-        : [yJump, yPeak, yPeak, yLate];
-    addSpike(objects, x);
-    addSpike(objects, x + 40);
-    const start = x + 100;
-    const end = placeChain(start, hs, orbSize);
-    carpet(x + 10, end + 25, tight >= 2 ? 36 : 42);
-    x =
-      end +
-      Math.round(speed * (tight >= 2 ? 0.38 : 0.4)) +
-      (tight >= 2 ? land : land);
-  }
-
-  // Fake single orb then punish chain
-  addSpike(objects, x);
-  addOrb(objects, x + 140, yJump, orbSize);
-  {
-    const hs =
-      tight >= 2
-        ? [yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yLate, yPeak]
-        : [yPeak, yPeak, yPeak, yPeak, yLate, yPeak];
-    const end = placeChain(x + 140 + gap, hs);
-    carpet(x + 40, end + 25, 40);
-    x = end + Math.round(speed * 0.5) + land;
-  }
-
-  // Stage III: relentless double gauntlet
-  if (tight >= 2) {
-    x += Math.round(speed * 0.15);
-    const hs = [
-      yJump, yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yPeak, yLate, yPeak,
-    ];
-    addSpike(objects, x);
-    addSpike(objects, x + 35);
-    const start = x + 90;
-    const end = placeChain(start, hs, 38);
-    carpet(x, end + 25, 34);
-    x = end + Math.round(speed * 0.55) + land;
-
-    const hs2 = [yJump, yPeak, yPeak, yPeak, yPeak, yPeak, yLate, yPeak, yLate];
-    addSpike(objects, x);
-    const end2 = placeChain(x + 80, hs2, 38);
-    carpet(x, end2 + 25, 34);
-    x = end2 + Math.round(speed * 0.55) + land;
-  }
-
-  if (tight === 1) {
-    const hs = [yJump, yPeak, yPeak, yPeak, yPeak, yLate];
-    addSpike(objects, x);
-    const end = placeChain(x + 100, hs);
-    carpet(x, end + 25, 42);
-    x = end + Math.round(speed * 0.55) + land;
-  }
-
-  // Finish: jump into last chain (no free pad before it)
-  addSpike(objects, x);
-  addSpike(objects, x + 50);
-  {
-    const hs =
-      tight >= 2
-        ? [yJump, yPeak, yPeak, yPeak, yLate]
-        : [yJump, yPeak, yPeak, yLate];
-    const end = placeChain(x + 120, hs);
-    carpet(x + 30, end + 25, 40);
-    x = end + Math.round(speed * 0.5);
-  }
-
-  addPad(objects, x);
-  addSpike(objects, x + 140);
-  addSpike(objects, x + 200);
-  x += Math.round(speed * 0.9);
-
-  return x + Math.round(speed * 1.1);
+  return x + Math.round(speed * 1.0);
 }
 
 /** 6 — Cubo + nave + flip */
